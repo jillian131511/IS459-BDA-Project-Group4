@@ -1,0 +1,167 @@
+{
+  "Comment": "IS459 G2 - AML big data pipeline. Orchestrates: Glue ETL -> Glue crawler -> Athena Q1 -> (EMR Spark Q2 || Athena benchmark). Placeholders __X__ are filled by infra/setup.sh. Start with input {\"variant\": \"HI-Small\", \"core_nodes\": 2, \"run_benchmark\": true, \"train_until\": \"none\"}",
+  "StartAt": "Defaults",
+  "States": {
+    "Defaults": {
+      "Type": "Pass",
+      "Comment": "Merge user input over defaults so every field is always present",
+      "Parameters": {
+        "defaults": {"variant": "HI-Small", "core_nodes": 2, "instance_type": "m5.xlarge", "run_benchmark": false, "train_until": "none"},
+        "input.$": "$"
+      },
+      "ResultPath": "$",
+      "Next": "MergeInput"
+    },
+    "MergeInput": {
+      "Type": "Pass",
+      "Parameters": {"cfg.$": "States.JsonMerge($.defaults, $.input, false)"},
+      "Next": "Glue ETL (raw CSV -> curated Parquet)"
+    },
+    "Glue ETL (raw CSV -> curated Parquet)": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "__ETL_JOB__",
+        "Arguments": {
+          "--VARIANT.$": "$.cfg.variant",
+          "--RAW_TRANS_PATH.$": "States.Format('s3://__BUCKET__/raw/transactions/variant={}/', $.cfg.variant)",
+          "--RAW_PATTERNS_PATH.$": "States.Format('s3://__BUCKET__/raw/patterns/variant={}/', $.cfg.variant)",
+          "--CURATED_PATH": "s3://__BUCKET__/curated"
+        }
+      },
+      "ResultPath": "$.etl",
+      "Retry": [{"ErrorEquals": ["Glue.ConcurrentRunsExceededException"], "IntervalSeconds": 60, "MaxAttempts": 3}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Pipeline failed"}],
+      "Next": "Start curated crawler"
+    },
+    "Start curated crawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {"Name": "__CRAWLER__"},
+      "ResultPath": null,
+      "Catch": [
+        {"ErrorEquals": ["Glue.CrawlerRunningException"], "ResultPath": null, "Next": "Wait for crawler"},
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Pipeline failed"}
+      ],
+      "Next": "Wait for crawler"
+    },
+    "Wait for crawler": {"Type": "Wait", "Seconds": 20, "Next": "Get crawler state"},
+    "Get crawler state": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {"Name": "__CRAWLER__"},
+      "ResultSelector": {"state.$": "$.Crawler.State"},
+      "ResultPath": "$.crawler",
+      "Next": "Crawler finished?"
+    },
+    "Crawler finished?": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.crawler.state", "StringEquals": "READY", "Next": "Athena Q1 (risk hotspots)"}],
+      "Default": "Wait for crawler"
+    },
+    "Athena Q1 (risk hotspots)": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "__ATHENA_JOB__",
+        "Arguments": {"--BUCKET": "__BUCKET__", "--VARIANT.$": "$.cfg.variant", "--MODE": "q1", "--TRAIN_UNTIL.$": "$.cfg.train_until"}
+      },
+      "ResultPath": "$.q1",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Pipeline failed"}],
+      "Next": "Q2 network + benchmark (parallel)"
+    },
+    "Q2 network + benchmark (parallel)": {
+      "Type": "Parallel",
+      "ResultPath": "$.parallel",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Pipeline failed"}],
+      "Next": "Pipeline succeeded",
+      "Branches": [
+        {
+          "StartAt": "Create transient EMR cluster",
+          "States": {
+            "Create transient EMR cluster": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::elasticmapreduce:createCluster.sync",
+              "Parameters": {
+                "Name.$": "States.Format('aml-q2-{}', $.cfg.variant)",
+                "ReleaseLabel": "__EMR_RELEASE__",
+                "Applications": [{"Name": "Spark"}],
+                "ServiceRole": "__EMR_SERVICE_ROLE__",
+                "JobFlowRole": "__EMR_EC2_PROFILE__",
+                "LogUri": "s3://__BUCKET__/emr-logs/",
+                "VisibleToAllUsers": true,
+                "Instances": {
+                  "KeepJobFlowAliveWhenNoSteps": true,
+                  "InstanceGroups": [
+                    {"Name": "Primary", "InstanceRole": "MASTER", "InstanceCount": 1, "InstanceType.$": "$.cfg.instance_type"},
+                    {"Name": "Core", "InstanceRole": "CORE", "InstanceCount.$": "$.cfg.core_nodes", "InstanceType.$": "$.cfg.instance_type"}
+                  ]
+                }
+              },
+              "ResultSelector": {"ClusterId.$": "$.ClusterId"},
+              "ResultPath": "$.emr",
+              "Next": "Run Q2 Spark step"
+            },
+            "Run Q2 Spark step": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+              "Parameters": {
+                "ClusterId.$": "$.emr.ClusterId",
+                "Step": {
+                  "Name": "q2-network-risk",
+                  "ActionOnFailure": "CONTINUE",
+                  "HadoopJarStep": {
+                    "Jar": "command-runner.jar",
+                    "Args.$": "States.Array('spark-submit', '--deploy-mode', 'cluster', '--py-files', 's3://__BUCKET__/scripts/emr/network_sql.py', 's3://__BUCKET__/scripts/emr/network_risk.py', '--bucket', '__BUCKET__', '--variant', $.cfg.variant, '--train-until', $.cfg.train_until)"
+                  }
+                }
+              },
+              "ResultPath": "$.step",
+              "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Terminate cluster after failure"}],
+              "Next": "Terminate EMR cluster"
+            },
+            "Terminate EMR cluster": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::elasticmapreduce:terminateCluster.sync",
+              "Parameters": {"ClusterId.$": "$.emr.ClusterId"},
+              "ResultPath": null,
+              "End": true
+            },
+            "Terminate cluster after failure": {
+              "Type": "Task",
+              "Comment": "Never leave a cluster running (and billing) after an error",
+              "Resource": "arn:aws:states:::elasticmapreduce:terminateCluster.sync",
+              "Parameters": {"ClusterId.$": "$.emr.ClusterId"},
+              "ResultPath": null,
+              "Next": "Q2 failed"
+            },
+            "Q2 failed": {"Type": "Fail", "Error": "Q2SparkStepFailed", "Cause": "See EMR step logs in s3://__BUCKET__/emr-logs/"}
+          }
+        },
+        {
+          "StartAt": "Run benchmark?",
+          "States": {
+            "Run benchmark?": {
+              "Type": "Choice",
+              "Choices": [{"Variable": "$.cfg.run_benchmark", "BooleanEquals": true, "Next": "Athena CSV vs Parquet benchmark"}],
+              "Default": "Skip benchmark"
+            },
+            "Athena CSV vs Parquet benchmark": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "__ATHENA_JOB__",
+                "Arguments": {"--BUCKET": "__BUCKET__", "--VARIANT.$": "$.cfg.variant", "--MODE": "benchmark", "--TRAIN_UNTIL": "none"}
+              },
+              "ResultPath": null,
+              "End": true
+            },
+            "Skip benchmark": {"Type": "Pass", "End": true}
+          }
+        }
+      ]
+    },
+    "Pipeline succeeded": {"Type": "Succeed"},
+    "Pipeline failed": {"Type": "Fail", "Error": "PipelineFailed", "Cause": "A stage failed - open the failed state in the Step Functions console for details"}
+  }
+}

@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" font-family="Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/>
+    </marker>
+    <style>
+      .t{font-size:17px;font-weight:700;fill:#0f172a}
+      .s{font-size:13px;fill:#334155}
+      .x{font-size:12px;fill:#64748b}
+      .lane{font-size:13px;font-weight:700;letter-spacing:2px;fill:#64748b}
+      .box{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:12}
+      .ln{stroke:#334155;stroke-width:2;fill:none;marker-end:url(#a)}
+      .lr{stroke:#b91c1c;stroke-width:2.2;fill:none;marker-end:url(#ar);stroke-dasharray:7 5}
+    </style>
+  </defs>
+  <rect width="1600" height="900" fill="#f8fafc"/>
+  <text x="40" y="48" font-size="28" font-weight="800" fill="#0f172a">FOLLOW THE MONEY · end-to-end AML pipeline on AWS</text>
+  <text x="40" y="76" class="s">Batch layer learns where risk is (Q1, Q2) · speed layer applies it to every new transaction · one Step Functions workflow runs it all</text>
+
+  <!-- orchestration band -->
+  <rect x="300" y="100" width="1000" height="52" rx="12" fill="#ede9fe" stroke="#a78bfa"/>
+  <text x="320" y="132" class="t" fill="#4c1d95">AWS Step Functions</text>
+  <text x="510" y="132" class="s">ETL → crawler → Athena Q1 → (EMR Q2 ∥ benchmark) · retries · auto-terminates EMR on failure</text>
+
+  <!-- lane labels -->
+  <text x="40" y="190" class="lane">1 · INGEST</text>
+  <text x="300" y="190" class="lane">2 · STORE (S3 DATA LAKE)</text>
+  <text x="640" y="190" class="lane">3 · PREPARE + CATALOG</text>
+  <text x="990" y="190" class="lane">4 · ANALYSE</text>
+  <text x="1320" y="190" class="lane">5 · VISUALISE</text>
+
+  <!-- ingest -->
+  <rect x="40" y="215" width="220" height="120" class="box"/>
+  <text x="58" y="245" class="t">Kaggle · IBM AML</text>
+  <text x="58" y="268" class="s">Trans.csv (5M → 180M rows)</text>
+  <text x="58" y="288" class="s">Patterns.txt (ground truth)</text>
+  <text x="58" y="315" class="x">HI-Small dev · HI-Large final</text>
+  <rect x="40" y="365" width="220" height="90" class="box"/>
+  <text x="58" y="395" class="t">EC2 ingestion</text>
+  <text x="58" y="418" class="s">Kaggle API → stream to S3</text>
+  <text x="58" y="438" class="x">md5 + row-count manifest</text>
+
+  <!-- S3 zones -->
+  <rect x="300" y="215" width="300" height="430" rx="14" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="318" y="245" class="t" fill="#9a3412">Amazon S3</text>
+  <rect x="318" y="262" width="264" height="74" class="box"/>
+  <text x="334" y="288" class="t">raw/</text>
+  <text x="334" y="310" class="s">CSV + TXT as delivered</text>
+  <text x="334" y="327" class="x">schema-on-read</text>
+  <rect x="318" y="352" width="264" height="92" class="box"/>
+  <text x="334" y="378" class="t">curated/</text>
+  <text x="334" y="400" class="s">Parquet · Snappy · USD-normalised</text>
+  <text x="334" y="420" class="s">partitioned variant / txn_date</text>
+  <text x="334" y="437" class="x">+ dq_report · fx_rates · patterns</text>
+  <rect x="318" y="460" width="264" height="92" class="box"/>
+  <text x="334" y="486" class="t">analytics/</text>
+  <text x="334" y="508" class="s">Q1 segment risk · Q2 watchlist</text>
+  <text x="334" y="528" class="s">evaluation · run_log (cost)</text>
+  <text x="334" y="545" class="x">Athena tables via partition projection</text>
+  <rect x="318" y="568" width="264" height="62" class="box"/>
+  <text x="334" y="594" class="t">streaming/alerts/</text>
+  <text x="334" y="614" class="s">micro-batched live alerts</text>
+
+  <!-- prepare -->
+  <rect x="640" y="262" width="300" height="110" class="box"/>
+  <text x="658" y="290" class="t">AWS Glue ETL (Spark)</text>
+  <text x="658" y="313" class="s">explicit schema · dedupe · DQ report</text>
+  <text x="658" y="333" class="s">FX implied from data · features</text>
+  <text x="658" y="353" class="x">CSV → partitioned Parquet</text>
+  <rect x="640" y="392" width="300" height="80" class="box"/>
+  <text x="658" y="420" class="t">Glue Crawler + Data Catalog</text>
+  <text x="658" y="443" class="s">tables + partitions for Athena</text>
+
+  <!-- analyse -->
+  <rect x="990" y="215" width="290" height="140" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
+  <text x="1008" y="243" class="t" fill="#155e75">Q1 · Amazon Athena</text>
+  <text x="1008" y="266" class="s">Where is the risk? segment lift,</text>
+  <text x="1008" y="286" class="s">Wilson lower bound, capture curve,</text>
+  <text x="1008" y="306" class="s">time profile, bank corridors</text>
+  <text x="1008" y="332" class="x">serverless SQL · UNLOAD → Parquet</text>
+  <rect x="990" y="375" width="290" height="160" rx="12" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="1008" y="403" class="t" fill="#991b1b">Q2 · Amazon EMR (Spark)</text>
+  <text x="1008" y="426" class="s">Who is moving it? fan-in/out,</text>
+  <text x="1008" y="446" class="s">2-4 hop cycles, scatter-gather,</text>
+  <text x="1008" y="466" class="s">weight-of-evidence scorecard +</text>
+  <text x="1008" y="486" class="s">plain-English reasons, holdout eval</text>
+  <text x="1008" y="512" class="x">transient cluster · created + killed by SFN</text>
+
+  <!-- visualise -->
+  <rect x="1320" y="215" width="250" height="320" rx="12" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="1338" y="243" class="t" fill="#166534">Streamlit dashboard</text>
+  <text x="1338" y="270" class="s">• Alert-budget optimiser</text>
+  <text x="1338" y="292" class="s">• Risk heatmaps</text>
+  <text x="1338" y="314" class="s">• Investigator watchlist</text>
+  <text x="1338" y="336" class="s">• Money-trail graph explorer</text>
+  <text x="1338" y="358" class="s">• Live alert feed</text>
+  <text x="1338" y="380" class="s">• Cost / benchmark evidence</text>
+  <text x="1338" y="412" class="x">boto3 → Athena, small</text>
+  <text x="1338" y="430" class="x">aggregated results only</text>
+  <text x="1338" y="470" class="t" font-size="14">Users</text>
+  <text x="1338" y="492" class="s">AML monitoring team (Q1)</text>
+  <text x="1338" y="512" class="s">Financial-crime investigators (Q2)</text>
+
+  <!-- speed layer -->
+  <rect x="640" y="690" width="930" height="150" rx="14" fill="#fef2f2" stroke="#f87171" stroke-dasharray="6 4"/>
+  <text x="660" y="720" class="t" fill="#991b1b">SPEED LAYER · near-real-time monitoring</text>
+  <rect x="660" y="735" width="210" height="88" class="box"/>
+  <text x="676" y="763" class="t">Producer</text>
+  <text x="676" y="785" class="s">replays unseen days</text>
+  <text x="676" y="805" class="x">keyed by sender account</text>
+  <rect x="910" y="735" width="250" height="88" class="box"/>
+  <text x="926" y="763" class="t">Apache Kafka (EC2)</text>
+  <text x="926" y="785" class="s">topic aml-transactions</text>
+  <text x="926" y="805" class="x">3 partitions · consumer group</text>
+  <rect x="1200" y="735" width="350" height="88" class="box"/>
+  <text x="1216" y="763" class="t">Consumer · real-time scoring</text>
+  <text x="1216" y="785" class="s">watchlist ∧ segment · hot segment · 24h velocity</text>
+  <text x="1216" y="805" class="x">batch outputs loaded from S3 serving layer</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M150 335 L150 365"/>
+  <path class="ln" d="M260 410 L290 410 L290 299 L314 299"/>
+  <path class="ln" d="M582 299 L636 299"/>
+  <path class="ln" d="M790 372 L790 388"/>
+  <path class="ln" d="M640 330 L610 330 L610 398 L586 398"/>
+  <path class="ln" d="M940 432 L965 432 L965 285 L986 285"/>
+  <path class="ln" d="M1135 355 L1135 371"/>
+  <path class="ln" d="M990 300 L960 300 L960 505 L586 505"/>
+  <path class="ln" d="M990 470 L975 470 L975 515 L586 515"/>
+  <path class="ln" d="M582 520 L600 520 L600 560 L1300 560 L1300 380 L1316 380"/>
+  <path class="lr" d="M318 325 L282 325 L282 868 L765 868 L765 827"/>
+  <path class="lr" d="M870 778 L906 778"/>
+  <path class="lr" d="M1160 778 L1196 778"/>
+  <path class="lr" d="M1375 735 L1375 665 L610 665 L610 600 L586 600"/>
+  <path class="lr" d="M1450 735 L1450 539"/>
+  <text x="300" y="860" class="x" fill="#b91c1c">replay raw events (unseen days)</text>
+</svg>

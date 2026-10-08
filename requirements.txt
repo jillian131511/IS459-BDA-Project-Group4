@@ -1,0 +1,8 @@
+# laptop / EC2 (dashboard, streaming, local tests). Glue and EMR provide their own Spark runtimes.
+pandas>=2.0
+numpy
+networkx
+boto3
+streamlit>=1.30
+plotly>=5.18
+kafka-python>=2.0.3
