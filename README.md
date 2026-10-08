@@ -1,5 +1,5 @@
-# Follow the Money · AML Risk Intelligence on AWS
-**IS459 Big Data Architecture · Group G4**
+# Follow the Money  AML Risk Intelligence on AWS
+**IS459 Big Data Architecture  Group G4**
 
 An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Laundering dataset (Kaggle,
 [Altman et al., NeurIPS 2023](https://arxiv.org/abs/2306.16424)) that answers two business questions:
@@ -29,7 +29,7 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 
 ## Quick start
 
-### 0 · Test locally (no AWS, ~1 minute)
+### 0  Test locally (no AWS, ~1 minute)
 ```bash
 pip install pandas numpy networkx           # plus streamlit plotly to view the dashboard
 python -m unittest tests/test_pipeline.py -v
@@ -40,14 +40,14 @@ python local/replay_local.py --start 2022/09/08
 DATA_MODE=local streamlit run dashboard/app.py      # shows SYNTHETIC data, clearly labelled
 ```
 
-### 1 · Deploy to AWS (Learner Lab, us-east-1)
+### 1  Deploy to AWS (Learner Lab, us-east-1)
 ```bash
 cp infra/config.env.example infra/config.env      # set a globally unique BUCKET
 aws emr create-default-roles                       # once, if EMR_DefaultRole does not exist
 bash infra/setup.sh
 ```
 
-### 2 · Ingest (on a t3.medium EC2, instance profile LabInstanceProfile, 40 GB disk)
+### 2  Ingest (on a t3.medium EC2, instance profile LabInstanceProfile, 40 GB disk)
 ```bash
 export BUCKET=... KAGGLE_USERNAME=... KAGGLE_KEY=...
 bash ingestion/download_to_s3.sh HI-Small       # dev
@@ -56,7 +56,7 @@ bash ingestion/download_to_s3.sh HI-Large       # final demo
 > Tip: before touching the real data, upload `data/raw/SYN-Small_*` to `raw/.../variant=SYN-Small/` and run the
 > pipeline on it - a 2-minute, cents-cheap smoke test of every AWS stage.
 
-### 3 · Run the whole pipeline (one click)
+### 3  Run the whole pipeline (one click)
 ```bash
 aws stepfunctions start-execution --state-machine-arn <arn printed by setup.sh> \
   --input '{"variant":"HI-Small","core_nodes":2,"run_benchmark":true,"train_until":"none"}'
@@ -65,7 +65,7 @@ For the live demo on unseen data, run once with `"train_until"` set to a date ab
 (check with `SELECT MIN(txn_date), MAX(txn_date) FROM aml.transactions WHERE variant='HI-Small'`), so the batch
 layer only learns from earlier days; then replay the later days through Kafka with `producer.py --start`.
 
-### 4 · Live monitor + dashboard (on the Kafka EC2)
+### 4  Live monitor + dashboard (on the Kafka EC2)
 ```bash
 bash streaming/setup_kafka_ec2.sh
 python3 streaming/consumer.py --bucket $BUCKET --variant HI-Small &
@@ -74,7 +74,7 @@ python3 streaming/producer.py --source s3://$BUCKET/raw/transactions/variant=HI-
 DATA_MODE=athena BUCKET=$BUCKET streamlit run dashboard/app.py --server.port 8501
 ```
 
-### 5 · After Week 13
+### 5  After Week 13
 ```bash
 bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR; then terminate EC2 instances
 ```
