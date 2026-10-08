@@ -1,0 +1,45 @@
+flowchart LR
+    %% Follow the Money - AML pipeline (IS459 Section G2, Group 4). Paste into https://mermaid.live to edit.
+    SFN{{"AWS Step Functions<br/>ETL → crawler → Athena Q1 → (EMR Q2 ∥ benchmark)<br/>retries · auto-terminates EMR"}}
+
+    subgraph ING["1 · Ingest"]
+        K["Kaggle · IBM AML<br/>Trans.csv + Patterns.txt"] --> E["EC2 ingestion<br/>Kaggle API → stream to S3"]
+    end
+
+    subgraph S3["2 · Amazon S3 data lake"]
+        RAW["raw/<br/>CSV + TXT as delivered"]
+        CUR["curated/<br/>Parquet, partitioned by date"]
+        ANA["analytics/<br/>Q1 + Q2 results, cost log"]
+        ALR["streaming/alerts/"]
+    end
+
+    subgraph PREP["3 · Prepare + catalog"]
+        G["AWS Glue ETL (Spark)<br/>schema · dedupe · DQ · USD · features"]
+        C["Glue Crawler + Data Catalog"]
+    end
+
+    subgraph AN["4 · Analyse"]
+        Q1["Q1 · Amazon Athena<br/>segment risk · capture curve"]
+        Q2["Q2 · Amazon EMR (Spark)<br/>graph motifs · WoE scorecard"]
+    end
+
+    subgraph VIS["5 · Visualise"]
+        D["Streamlit dashboard<br/>budget optimiser · watchlist · money trail"]
+        U["Users<br/>AML monitoring team · investigators"]
+    end
+
+    subgraph SPEED["Speed layer · near real time"]
+        P["Producer<br/>replays unseen days"] --> KF["Apache Kafka on EC2<br/>3 partitions"] --> CO["Consumer<br/>real-time scoring"]
+    end
+
+    E --> RAW --> G --> CUR
+    G --> C --> Q1
+    Q1 -->|UNLOAD| ANA
+    Q1 -->|lift feeds Q2| Q2
+    Q2 --> ANA --> D --> U
+    RAW -.->|replay| P
+    CO -.-> ALR
+    CO -.->|live feed| D
+    SFN -.-> G
+    SFN -.-> Q1
+    SFN -.-> Q2
