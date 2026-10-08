@@ -1,5 +1,5 @@
 # Follow the Money · AML Risk Intelligence on AWS
-**IS459 Big Data Architecture · Group G2**
+**IS459 Big Data Architecture · Group G4**
 
 An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Laundering dataset (Kaggle,
 [Altman et al., NeurIPS 2023](https://arxiv.org/abs/2306.16424)) that answers two business questions:
