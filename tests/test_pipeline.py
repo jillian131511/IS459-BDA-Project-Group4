@@ -99,6 +99,10 @@ class Pipeline(unittest.TestCase):
         for i in range(3):                                                             # velocity window
             r = m.score({**base, "src_id": "7:V", "dst_id": f"2:{i}", "ts_epoch": i * 60})
         self.assertIn("velocity", r["reasons"])
+        h = RiskModel(wl, seg, velocity_k=3, hubs=["7:V"])                                 # hubs skip velocity
+        for i in range(3):
+            r = h.score({**base, "src_id": "7:V", "dst_id": f"2:{i}", "ts_epoch": i * 60})
+        self.assertIsNone(r)
         self.assertEqual(amount_band(999.99), "b 100-1K")
 
     def test_dashboard_runs(self):

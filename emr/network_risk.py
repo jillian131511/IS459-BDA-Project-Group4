@@ -129,6 +129,10 @@ def main():
 
     spark.read.parquet(f"{base}/curated/fx_rates/variant={a.variant}").select("currency", "units_per_usd") \
         .coalesce(1).write.mode("overwrite").option("header", "true").csv(f"{serving}/fx_rates")
+    # hub accounts (more counterparties than hub_degree on the learning days): the live velocity rule skips them,
+    # exactly as the batch fan-out flags do
+    spark.table("account_stats").filter(F.col("total_degree") > params["hub_degree"]).select("acct") \
+        .coalesce(1).write.mode("overwrite").option("header", "true").csv(f"{serving}/hubs")
 
     run_info = {"variant": a.variant, "tag": a.tag, "lineage": a.lineage, "train_until": a.train_until, "test_until": a.test_until,
                 "params": params, "step_seconds": timings, "total_seconds": round(time.time() - t_start, 1)}

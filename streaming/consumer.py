@@ -39,19 +39,27 @@ def main():
     ap.add_argument("--topic", default="aml-transactions")
     ap.add_argument("--group", default="aml-monitor")
     ap.add_argument("--min-probability", type=float, default=0.5)
+    # 11 = chosen on a LEARNING day (7 Sep replay, hubs excluded) and equal to the batch layer's fan_out_k; see
+    # docs/decisions.md. The grading day (8 Sep) was measured once, after the choice.
+    ap.add_argument("--velocity-k", type=int, default=11, help="distinct payees in 24 h that raise a velocity alert")
     ap.add_argument("--flush-secs", type=int, default=15)
     a = ap.parse_args()
 
     s3 = boto3.client("s3")
     base = f"analytics/serving/variant={a.variant}"
+    try:  # hub accounts from the batch layer (older runs did not publish them)
+        hubs = [l.strip().strip('"') for l in read_serving_csv(s3, a.bucket, f"{base}/hubs/").splitlines()[1:]]
+    except FileNotFoundError:
+        hubs = []
     model = RiskModel(read_serving_csv(s3, a.bucket, f"{base}/watchlist/"),
                       read_serving_csv(s3, a.bucket, f"{base}/segment_risk/"),
-                      min_probability=a.min_probability)
+                      min_probability=a.min_probability, velocity_k=a.velocity_k, hubs=hubs)
     fx = {}
     for line in read_serving_csv(s3, a.bucket, f"{base}/fx_rates/").splitlines()[1:]:
         cur, rate = line.rsplit(",", 1)
         fx[cur.strip('"')] = float(rate)
-    print(f"model loaded: {len(model.watch)} watchlist accounts, {len(model.hot)} hot segments, {len(fx)} currencies")
+    print(f"model loaded: {len(model.watch)} watchlist accounts, {len(model.hot)} hot segments, "
+          f"{len(model.hubs)} hubs, velocity k={a.velocity_k}, {len(fx)} currencies")
 
     consumer = KafkaConsumer(a.topic, bootstrap_servers=a.bootstrap, group_id=a.group,
                              auto_offset_reset="earliest", enable_auto_commit=True,
