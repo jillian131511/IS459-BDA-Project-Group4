@@ -28,7 +28,8 @@ else
 fi
 
 for P in service-role/AWSGlueServiceRole AmazonS3FullAccess AmazonAthenaFullAccess \
-         AmazonEMRFullAccessPolicy_v2 CloudWatchLogsFullAccess AmazonEventBridgeFullAccess; do
+         AmazonEMRFullAccessPolicy_v2 CloudWatchLogsFullAccess AmazonEventBridgeFullAccess \
+         AmazonSSMManagedInstanceCore; do   # SSM: manage the serving EC2 without SSH
   aws iam attach-role-policy --role-name "$ROLE" --policy-arn "arn:aws:iam::aws:policy/$P"
 done
 # Step Functions must be allowed to hand the EMR roles (and this role, for Glue) to the services it starts

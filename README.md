@@ -20,8 +20,8 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | `athena/q1_*.sql`, `athena/ddl.sql`, `athena/run_athena.py` | Q1 analytics (UNLOAD to Parquet), table DDL with partition projection, CSV-vs-Parquet benchmark, per-query cost log | Athena via Glue Python shell |
 | `emr/network_sql.py`, `emr/network_risk.py` | Q2 graph motifs + scorecard + time-based evaluation, written as portable SQL steps; heavy steps checkpointed | Spark on a transient EMR cluster |
 | `stepfunctions/aml_pipeline.asl.json` | Orchestration: ETL → crawler → Q1 → (Q2 ∥ benchmark); auto-terminates EMR on failure | Step Functions |
-| `streaming/` | Kafka producer, consumer, scoring rules (`monitor_core.py`), EC2 Kafka setup | EC2 |
-| `dashboard/app.py` | Streamlit dashboard (Athena mode or local mode) | EC2 / laptop |
+| `streaming/` | Kafka producer, consumer, scoring rules (`monitor_core.py`), `run_live_demo.sh` | EC2 |
+| `dashboard/app.py`, `infra/launch_serving_ec2.sh` | Streamlit dashboard (Athena mode or local mode) and the serving EC2 that runs it next to Kafka | EC2 / laptop |
 | `infra/create_roles.sh`, `infra/setup.sh`, `infra/teardown.sh` | Pipeline IAM role (normal accounts only), one-shot deploy (idempotent), full clean-up | CloudShell |
 | `local/` | Synthetic data generator in the exact Kaggle format + local runners (SQLite) | laptop |
 | `tests/test_pipeline.py` | End-to-end local test suite (8 tests) | laptop |
@@ -68,14 +68,15 @@ aws stepfunctions start-execution --state-machine-arn <arn printed by setup.sh> 
 Experiments (other windows, `--lineage cache` for the before/after timing) run as extra EMR steps with
 `--out-prefix experiments/<tag>` so they never overwrite the official results in `analytics/`.
 
-### 4  Live monitor + dashboard (on the Kafka EC2)
+### 4  Dashboard + Kafka speed layer (one serving EC2)
 ```bash
-bash streaming/setup_kafka_ec2.sh
-python3 streaming/consumer.py --bucket $BUCKET --variant HI-Small &
-python3 streaming/producer.py --source s3://$BUCKET/raw/transactions/variant=HI-Small/HI-Small_Trans.csv \
-        --start 2022/09/08 --max-events 200000 --speed 3600
-DATA_MODE=athena BUCKET=$BUCKET streamlit run dashboard/app.py --server.port 8501
+bash infra/launch_serving_ec2.sh        # t3.large running Kafka (KRaft, 3 partitions) + Streamlit (Athena mode)
+                                        # as systemd services; prints http://<public-ip>:8501
+# live demo, run ON the server (Systems Manager -> Run Command, no SSH needed):
+bash /opt/aml/streaming/run_live_demo.sh <bucket> HI-Small 2022/09/08
+aws ec2 stop-instances --instance-ids <id>   # when nobody is using it; start-instances brings both services back
 ```
+The replay starts at the first official grading day, so the stream only contains days the batch layer never learned from.
 
 ### 5  After Week 13
 ```bash
