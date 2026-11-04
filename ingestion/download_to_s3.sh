@@ -24,7 +24,9 @@ DATASET="ealtman2019/ibm-transactions-for-anti-money-laundering-aml"
 WORK="${WORK_DIR:-$HOME/aml_ingest}"
 mkdir -p "$WORK" && cd "$WORK"
 
-command -v kaggle >/dev/null || pip3 install --user --quiet kaggle six   # six: missing dependency of kaggle 2.x
+# kaggle 2.x (needed for KGAT_ tokens) needs a newer Python than Amazon Linux 2023's default 3.9
+PY=$(command -v python3.11 || command -v python3)
+command -v kaggle >/dev/null || "$PY" -m pip install --user --quiet kaggle six   # six: missing dependency of kaggle 2.x
 export PATH="$HOME/.local/bin:$PATH"
 
 for KIND in Trans Patterns; do

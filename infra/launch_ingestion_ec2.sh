@@ -32,7 +32,7 @@ exec > >(tee -a \$LOG) 2>&1
 push_log() { aws s3 cp \$LOG s3://$BUCKET/raw/_ingest_logs/\$ID.log --only-show-errors || true; }
 trap 'push_log; shutdown -h now' EXIT
 echo "start \$(date -u +%FT%TZ) variants: $VARIANTS"
-dnf install -y -q python3-pip unzip
+dnf install -y -q python3.11 python3.11-pip unzip
 export HOME=/root BUCKET=$BUCKET AWS_DEFAULT_REGION=$AWS_REGION
 export KAGGLE_API_TOKEN=\$(aws s3 cp s3://$BUCKET/secrets/kaggle_token -) && aws s3 rm s3://$BUCKET/secrets/kaggle_token
 aws s3 cp s3://$BUCKET/scripts/ingestion/download_to_s3.sh /root/download_to_s3.sh
