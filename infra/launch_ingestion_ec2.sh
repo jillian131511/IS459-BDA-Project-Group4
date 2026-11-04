@@ -44,7 +44,7 @@ echo "done \$(date -u +%FT%TZ)"
 EOF
 
 IID=$(aws ec2 run-instances --image-id "$AMI" --instance-type t3.medium \
-  --iam-instance-profile Name=LabInstanceProfile \
+  --iam-instance-profile Name="${INSTANCE_PROFILE:-LabInstanceProfile}" \
   --instance-initiated-shutdown-behavior terminate \
   --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=60,VolumeType=gp3,DeleteOnTermination=true}' \
   --user-data file:///tmp/aml_ingest_userdata.sh \
