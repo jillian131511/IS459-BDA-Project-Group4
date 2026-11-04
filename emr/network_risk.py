@@ -41,6 +41,9 @@ def main():
     spark = (SparkSession.builder.appName(f"aml-network-risk-{a.variant}")
              .config("spark.sql.adaptive.enabled", "true")            # adaptive query execution handles skew
              .config("spark.sql.adaptive.skewJoin.enabled", "true")
+             # Many steps reuse cached views; AQE writes the full plan as text for the Spark UI and that text
+             # grew past the 2 GB driver heap (OutOfMemoryError on the first EMR run). Cap it.
+             .config("spark.sql.maxPlanStringLength", "100000")
              .getOrCreate())
 
     tx = spark.read.parquet(f"{base}/curated/transactions/variant={a.variant}")
