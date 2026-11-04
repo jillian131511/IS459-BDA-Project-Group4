@@ -49,10 +49,14 @@ The resources already exist, so every command below **updates** them (all script
    grep -E "^export (BUCKET|PIPELINE_ROLE|INSTANCE_PROFILE)" infra/config.env
    ```
    Expected: the three lines with `is459-g2-aml-050752609589`, `aml-pipeline-role`, `aml-pipeline-profile`.
-4. `bash infra/create_roles.sh` → ends with `role=aml-pipeline-role instance_profile=aml-pipeline-profile ready` (30 s).
-5. `bash infra/setup.sh` → 12 lines ending `"state": "SUCCEEDED"`, the two Glue job names, the `aml-pipeline`
-   ARN, `Deployed.` Then show in the console: S3 bucket, Glue → Data Catalog → `aml` tables, Glue → ETL jobs,
-   Glue → Crawlers, Step Functions → `aml-pipeline` → Graph view (2 min).
+   Say once: *"Our pipeline is already deployed, so the scripts update each resource in place. On a fresh
+   account the same commands create them from scratch."*
+4. `bash infra/create_roles.sh` → only the last line, `role=aml-pipeline-role instance_profile=aml-pipeline-profile ready`
+   (everything already exists) (30 s).
+5. `bash infra/setup.sh` → upload lines, 12 lines ending `"state": "SUCCEEDED"`, `{"JobName": "aml-etl-transactions"}`
+   and `{"JobName": "aml-athena-runner"}` (updated, not created), an `"updateDate"` for the state machine, then
+   `Deployed.` (no `"Location"` line: the bucket already exists). Then show in the console: S3 bucket, Glue → Data
+   Catalog → `aml` tables, Glue → ETL jobs, Glue → Crawlers, Step Functions → `aml-pipeline` → Graph view (2 min).
 6. `export KAGGLE_API_TOKEN=KGAT_...` (own token) → `bash infra/launch_ingestion_ec2.sh HI-Small` →
    EC2 → Instances: `aml-ingest` Running, then Terminated after ~2 min (2 min, speed up the wait).
 7. `source infra/config.env && aws s3 cp s3://$BUCKET/raw/_manifests/HI-Small_Trans.json -` → `"lines":5078346`,
