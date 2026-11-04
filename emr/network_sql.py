@@ -315,10 +315,16 @@ WHERE risk_rank <= {top_k}
     ("watchlist_edges", """
 SELECT src_id, dst_id, n_txn, usd, first_ts, last_ts, any_laundering
 FROM (
-    SELECT p.*, ROW_NUMBER() OVER (PARTITION BY w.acct ORDER BY p.usd DESC) AS rn
-    FROM pairs p
-    JOIN (SELECT acct FROM account_ranked WHERE risk_rank <= 300) w
-      ON w.acct = p.src_id OR w.acct = p.dst_id
+    SELECT u.*, ROW_NUMBER() OVER (PARTITION BY u.wacct ORDER BY u.usd DESC) AS rn
+    FROM (
+        -- two equi-joins instead of one "src OR dst" join: an OR join compares every pair with every
+        -- watchlist account (a nested loop), which is billions of comparisons on HI-Large
+        SELECT p.src_id, p.dst_id, p.n_txn, p.usd, p.first_ts, p.last_ts, p.any_laundering, w.acct AS wacct
+        FROM pairs p JOIN (SELECT acct FROM account_ranked WHERE risk_rank <= 300) w ON w.acct = p.src_id
+        UNION ALL
+        SELECT p.src_id, p.dst_id, p.n_txn, p.usd, p.first_ts, p.last_ts, p.any_laundering, w.acct AS wacct
+        FROM pairs p JOIN (SELECT acct FROM account_ranked WHERE risk_rank <= 300) w ON w.acct = p.dst_id
+    ) u
 ) z
 WHERE rn <= 40
 """),
