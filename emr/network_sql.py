@@ -154,7 +154,7 @@ FROM (SELECT src_id AS acct, is_laundering FROM edges
       SELECT dst_id AS acct, is_laundering FROM edges) u
 GROUP BY acct
 """),
-    # 12. One row per account with its red-flag features. Accounts are split 50/50 by the last hex digit of
+    # 12. One row per account with its red-flag features. Accounts are split 50/50 by a hex digit of
     #     the account id: CALIBRATION accounts are used to learn how much each flag is worth, HOLDOUT
     #     accounts are used only to measure performance -> no label leakage in the reported numbers.
     ("account_features", """
@@ -173,7 +173,9 @@ SELECT s.acct, s.max_daily_fan_out, s.max_daily_fan_in, s.gather_scatter_day, s.
        CASE WHEN COALESCE(x.seg_lift_avg, 0) >= 10 THEN 3
             WHEN COALESCE(x.seg_lift_avg, 0) >= 3 THEN 2
             WHEN COALESCE(x.seg_lift_avg, 0) >= 1 THEN 1 ELSE 0 END AS f_segment,
-       CASE WHEN substr(s.acct, -1) IN ('0','2','4','6','8','A','C','E') THEN 'calibration' ELSE 'holdout' END AS split,
+       -- 2nd-to-last character: evenly spread over 0-F. (The LAST character is '0' for ~97% of IBM AML account
+       -- ids, which made the "holdout half" only 3% of accounts - found on the first HI-Small run.)
+       CASE WHEN substr(s.acct, -2, 1) IN ('0','2','4','6','8','A','C','E') THEN 'calibration' ELSE 'holdout' END AS split,
        t.is_bad
 FROM account_stats s
 JOIN truth t ON t.acct = s.acct
