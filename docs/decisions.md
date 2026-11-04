@@ -2,6 +2,26 @@
 
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 
+## 2026-11-04 · Speed layer works; the velocity rule is too noisy (open item)
+
+Kafka (KRaft, 3 partitions) and the dashboard run on one t3.large (`infra/launch_serving_ec2.sh`). Replay of
+HI-Small from the first grading day (8 Sep), 100,000 transfers in 285 s (about 350 a second), median delay from
+transfer to alert 25 ms at low load and about 0.2 s at full speed. A few later-dated rows sit early in the raw
+file; the producer now caps its pauses so they cannot stall the replay.
+
+Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 54 laundering = 0.058 %):
+
+| Rule | Alerts | Truly laundering |
+|---|---|---|
+| Velocity (paid 8+ different accounts in 24 h) | 8,075 | 6 |
+| Hot channel + watchlist rules | about 780 | 11 |
+| All rules | 8,857 (9.5 % of transfers) | 17 (0.19 %, about 3x random); 17 of 54 laundering transfers caught |
+
+The velocity rule fires mostly on busy ordinary accounts (merchants, payroll) - the "hubs" the batch layer already
+leaves out of its fan-out flags. **Not tuned on these results**, because that would tune on the grading days.
+Next step: exclude the batch layer's hub accounts from the velocity rule and set its threshold on a replay of a
+learning day (7 Sep), then measure once on 8 Sep.
+
 ## 2026-11-04 · HI-Large is run in full (the pitch's 180 million transfers)
 
 The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run instead of HI-Medium. It has the

@@ -13,6 +13,13 @@ export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 PY=$(command -v python3.11 || command -v python3)
 pkill -f streaming/consumer.py 2>/dev/null || pkill -f "consumer.py --bucket" 2>/dev/null || true
 rm -f out/alerts.jsonl out/stats.json
+# start from an empty topic, so leftovers from an earlier replay are not scored (and timed) again
+K=/opt/kafka/bin/kafka-topics.sh
+if [ -x "$K" ]; then
+  "$K" --bootstrap-server localhost:9092 --delete --topic aml-transactions 2>/dev/null || true
+  for i in $(seq 1 20); do "$K" --bootstrap-server localhost:9092 --list | grep -qx aml-transactions || break; sleep 1; done
+  "$K" --bootstrap-server localhost:9092 --create --if-not-exists --topic aml-transactions --partitions 3 --replication-factor 1
+fi
 # a fresh consumer group each run, so the replay is scored from the first event
 nohup "$PY" consumer.py --bucket "$BUCKET" --variant "$VARIANT" --group "demo-$(date +%s)" > /var/log/aml_consumer.log 2>&1 &
 sleep 8
