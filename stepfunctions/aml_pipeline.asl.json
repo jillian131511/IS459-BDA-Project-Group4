@@ -91,7 +91,7 @@
                 "LogUri": "s3://__BUCKET__/emr-logs/",
                 "VisibleToAllUsers": true,
                 "AutoTerminationPolicy": {"IdleTimeout": 1800},
-                "Tags": [{"Key": "Project", "Value": "aml-g2"}],
+                "Tags": [{"Key": "Project", "Value": "aml-g2"}, {"Key": "for-use-with-amazon-emr-managed-policies", "Value": "true"}],
                 "Instances": {
                   "KeepJobFlowAliveWhenNoSteps": true,
                   "InstanceGroups": [
