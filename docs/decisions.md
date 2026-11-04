@@ -2,6 +2,30 @@
 
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 
+## 2026-11-04 · Q2 accounts are split on the 2nd-to-last character of the account id
+
+**Finding.** The scorecard learns on "calibration" accounts and is graded on "holdout" accounts, split by
+the last hex character of the account id. On HI-Small, 483,675 account ids end in `0` and 13,317 in `1`,
+so the holdout "half" was only 11,649 accounts (3 %) — a small and unusual group. The 2nd-to-last
+character is evenly spread (≈31,000 accounts per hex digit), so the split now uses it.
+
+**Effect.** All Q2 accuracy figures from before this change are discarded.
+
+## 2026-11-04 · Q2 heavy steps are checkpointed, not cached (tuning)
+
+**Observe.** First HI-Small run on EMR (3 × m5.xlarge): the Q2 step took 44 min; the ranking step
+alone took 670 s of 932 s of step time while doing little real work.
+**Hypothesise.** Each step's query plan carries every earlier step, so Spark spends its time re-planning
+and matching cached plans rather than computing. (Adding *more* caching made it slower, which supports this.)
+**Change one thing.** `--lineage checkpoint`: heavy steps are checkpointed to the cluster's HDFS, which
+saves the result and cuts the plan back to "read this saved table".
+**Measure.** Local SYN-Small, same code, only the switch changed: 593.5 s → 40.0 s, identical watchlist.
+EMR HI-Small figures: see the experiment results.
+
+A second finding on the way: the fan-in/fan-out thresholds used Spark's *approximate* percentile, which
+returned 9, 10 or 11 for the same data depending on layout and changed the watchlist between runs. They now
+use the exact percentile.
+
 ## 2026-11-04 · Q2 accuracy is graded on 8–10 Sep (HI-Small)
 
 **Finding.** HI-Small spans 18 days, not 10. From 11 Sep onwards the simulator produces almost no normal
