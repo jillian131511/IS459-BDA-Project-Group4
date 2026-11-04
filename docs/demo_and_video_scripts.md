@@ -1,41 +1,87 @@
 # Week 13 demo plan and video scripts
 
-## 1 · Live demo (fits the 15-minute slot; every member demos one component)
+Everything runs in the **team AWS account** (`g2team4`, us-east-1, bucket `is459-g2-aml-050752609589`).
+Goat runs the pipeline; each member owns one part, checks it in the console, presents it and answers on it.
+
+## 0 · Who owns what
+
+| Member | Owns | Checks in the console | Video |
+|---|---|---|---|
+| 1 · Goat | Running the pipeline, cost, teardown, repo | Step Functions executions, Billing → Cost Explorer | – |
+| 2 | Ingestion (self-terminating EC2, manifests) + Step Functions | S3 `raw/`, `raw/_manifests/`, EC2 instances, Step Functions graph | **Films Video A** |
+| 3 | Glue cleaning, data quality, exchange rates | Glue → ETL jobs → Runs; Athena `aml.dq_report`, `aml.fx_rates` | – |
+| 4 | Q1 in Athena, budget slider, CSV vs Parquet | Athena `aml.q1_segment_risk`; S3 `analytics/run_log/` | – |
+| 5 | Q2 on EMR, grading, tuning + window evidence | EMR → Clusters → Steps (+ Spark history UI); Athena `aml.q2_evaluation_time` | – |
+| 6 | Dashboard, Kafka speed layer | Dashboard link; Kafka EC2 | **Films and edits Video B**, uploads both |
+
+Each member logs into the team console with the group login (never with the IAM access key).
+
+## 1 · Live demo (15-minute slot; every member demos one component)
+
 | Time | Presenter | What is on screen |
 |---|---|---|
-| 0:00-1:30 | [Member 1] | Recap: two questions, users, architecture slide |
-| 1:30-3:00 | [Member 2] | S3 raw zone + ingestion manifest; Step Functions graph of a finished HI-Large run (green states) |
-| 3:00-4:30 | [Member 3] | Glue job run details; curated Parquet partitions; DQ report table in Athena |
-| 4:30-6:30 | [Member 4] | Dashboard Q1 tab: move the budget slider live; heatmaps; benchmark (CSV vs Parquet bytes scanned) |
-| 6:30-9:00 | [Member 5] | Dashboard Q2 tab: holdout precision chart; watchlist; open one account in the money-trail explorer, read its reasons, reveal ground truth |
-| 9:00-11:00 | [Member 6] | Start producer + consumer on the Kafka EC2; Live tab fills with alerts; point out latency and precision |
-| 11:00-12:30 | [Member 1] | Cost: actual run log totals vs USD 250; teardown plan; individual-contributions slide |
-| 12:30-15:00 | all | Buffer + Q&A prep |
+| 0:00-1:30 | Member 1 | Recap: two questions, users, architecture slide |
+| 1:30-3:00 | Member 2 | S3 raw zone + an ingestion manifest; Step Functions graph of the finished official HI-Medium run (all green) |
+| 3:00-4:30 | Member 3 | Glue job run details; curated Parquet day folders; `aml.dq_report` in Athena |
+| 4:30-6:30 | Member 4 | Dashboard Q1 tab: move the budget slider live; heatmaps; CSV vs Parquet bytes scanned |
+| 6:30-9:00 | Member 5 | Dashboard Q2 tab: grading table (same days vs 8-10 Sep); watchlist; one account in the money-trail explorer; the tuning and window tables |
+| 9:00-11:00 | Member 6 | Kafka: producer + consumer, Live tab fills with alerts (or the recorded clip) |
+| 11:00-12:30 | Member 1 | Cost from Cost Explorer; teardown plan; individual-contributions slide |
+| 12:30-15:00 | all | Buffer + Q&A |
 
-Back-up: if any live step stalls, play the pre-recorded clip of that step (Option 2 in the brief) and narrate.
+Back-up: if a live step stalls, play the recorded clip of that step and narrate.
 
-## 2 · Video A: "Set up the pipeline end-to-end" (target 6-8 min, narrated)
-1. Show the GitHub repo layout (30 s).
-2. Learner Lab: start lab, open CloudShell, `git clone`, edit `infra/config.env` (45 s).
-3. `bash infra/setup.sh`: show each created resource in the console: bucket + zones, Glue jobs, crawler, Athena
-   tables, state machine (2 min).
-4. Launch the ingestion EC2 (t3.medium, LabInstanceProfile, 40 GB), set Kaggle token, run
-   `ingestion/download_to_s3.sh HI-Small`; show the manifest JSON in S3 (2 min).
-5. Launch the Kafka EC2, run `streaming/setup_kafka_ec2.sh`, show topic with 3 partitions (1 min).
+## 2 · Video A: "Set up the pipeline end-to-end" (6-8 min, narrated) — Member 2, in the team account
 
-## 3 · Video B: "Run the pipeline end-to-end" (target 6-8 min, narrated)
-1. Start the Step Functions execution with the JSON input; narrate each state as it turns green (speed up the
-   waiting parts) (3 min).
-2. Athena: query `aml.q1_segment_risk` and `aml.q2_evaluation` for the variant (1 min).
-3. Open the dashboard in Athena mode; walk through Q1 and Q2 tabs (2 min).
-4. Start consumer and producer; show alerts arriving and the stats line (1 min).
-5. Show `analytics/run_log/` with bytes scanned and cost per query (30 s).
+The resources already exist, so every command below **updates** them (all scripts are safe to re-run).
+**Do not run `teardown.sh` afterwards** — it would delete the team's data and results.
+
+1. GitHub: click through `ingestion/ glue/ athena/ emr/ stepfunctions/ dashboard/ infra/` (30 s).
+2. Team console (region **N. Virginia**) → **CloudShell** (`>_` icon). Upload the repo ZIP
+   (GitHub → Code → Download ZIP; CloudShell → Actions → Upload file), then
+   `unzip -q IS459-BDA-Project-Group4-main.zip && cd IS459-BDA-Project-Group4-main` (45 s).
+3. Settings for the team account (copy-paste, then check) (30 s):
+   ```bash
+   cp infra/config.env.example infra/config.env
+   sed -i -e "s/is459-g2-aml-CHANGE-ME/is459-g2-aml-050752609589/" \
+          -e "s/^export PIPELINE_ROLE=LabRole.*/export PIPELINE_ROLE=aml-pipeline-role/" \
+          -e "s/^export INSTANCE_PROFILE=LabInstanceProfile.*/export INSTANCE_PROFILE=aml-pipeline-profile/" infra/config.env
+   grep -E "^export (BUCKET|PIPELINE_ROLE|INSTANCE_PROFILE)" infra/config.env
+   ```
+   Expected: the three lines with `is459-g2-aml-050752609589`, `aml-pipeline-role`, `aml-pipeline-profile`.
+4. `bash infra/create_roles.sh` → ends with `role=aml-pipeline-role instance_profile=aml-pipeline-profile ready` (30 s).
+5. `bash infra/setup.sh` → 12 lines ending `"state": "SUCCEEDED"`, the two Glue job names, the `aml-pipeline`
+   ARN, `Deployed.` Then show in the console: S3 bucket, Glue → Data Catalog → `aml` tables, Glue → ETL jobs,
+   Glue → Crawlers, Step Functions → `aml-pipeline` → Graph view (2 min).
+6. `export KAGGLE_API_TOKEN=KGAT_...` (own token) → `bash infra/launch_ingestion_ec2.sh HI-Small` →
+   EC2 → Instances: `aml-ingest` Running, then Terminated after ~2 min (2 min, speed up the wait).
+7. `source infra/config.env && aws s3 cp s3://$BUCKET/raw/_manifests/HI-Small_Trans.json -` → `"lines":5078346`,
+   `"md5":"9667f3a6323e6ad88e699acf42db9157"` — the same fingerprint as every earlier download (1 min).
+
+## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records the official HI-Medium run
+
+1. Step Functions → `aml-pipeline` → **Start execution**, input
+   `{"variant":"HI-Medium","core_nodes":4,"run_benchmark":true,"train_until":"<from Member 3>","test_until":"<from Member 3>","window_days":"3"}`;
+   narrate each state as it turns green, speed up the waiting (3 min).
+2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Medium' ORDER BY risk_rank LIMIT 10` and
+   `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Medium' ORDER BY period, k` (1 min).
+3. Dashboard: Q1 tab (slider) and Q2 tab (watchlist, money trail) (2 min).
+4. Kafka: consumer + producer, alerts arriving (1 min) — only if built.
+5. S3 `analytics/run_log/`: bytes scanned and cost per query (30 s).
+
+Record every attempt; keep the clean one. Upload both videos to YouTube (unlisted) and add the links to the
+README and the appendix slide.
 
 ## 4 · Likely Q&A and short answers
-* **Why EMR and not Glue for Q2?** Multi-hop self-joins are iterative and memory-heavy; Spark on EMR lets us cache
-  intermediates and size the cluster; it is transient so it costs only while running (W6 s28, s33).
-* **Isn't the precision inflated because you used the labels?** Weights are learned on half of the accounts; all
-  reported precision is on the other half; the live demo replays days the batch layer never saw.
+* **Why EMR and not Glue for Q2?** Multi-hop self-joins are iterative and memory-heavy; Spark on EMR lets us keep
+  intermediate results and size the cluster; it is transient so it costs only while running (W6 s28, s33).
+* **Isn't the precision inflated because you used the labels?** Weights are learned on one half of the accounts and
+  only from the learning days; the official figure is measured on the other half, on later days (8-10 Sep). We also
+  found and fixed a split that graded only 3 % of accounts (`docs/decisions.md`).
+* **Why 3 days?** Measured: 1 -> 3 days nearly doubles precision and finds the most laundering attempts; 3 -> 7 adds
+  0.4 points and costs 39 % more path-join time.
+* **What did tuning change?** Checkpointing the heavy Spark steps: Q2 went from 44 to about 3.6 minutes with an
+  identical watchlist (Week 10 loop: observe, hypothesise, change one thing, measure).
 * **Why Wilson lower bound?** A segment with 1 laundering case out of 2 has a 50 % raw rate but tells us almost
   nothing; the lower bound ranks by risk we are statistically confident about.
 * **How would this run in production?** Daily files land in `raw/`, an EventBridge schedule starts the same state
