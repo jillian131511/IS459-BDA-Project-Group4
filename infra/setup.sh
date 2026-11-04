@@ -59,9 +59,10 @@ else
 fi
 ATH_CMD="{\"Name\":\"pythonshell\",\"ScriptLocation\":\"s3://$BUCKET/scripts/athena/run_athena.py\",\"PythonVersion\":\"3.9\"}"
 if aws glue get-job --job-name "$ATHENA_JOB" >/dev/null 2>&1; then
-  aws glue update-job --job-name "$ATHENA_JOB" --job-update "{\"Role\":\"$ROLE_ARN\",\"Command\":$ATH_CMD,\"MaxCapacity\":0.0625,\"Timeout\":60}"
+  aws glue update-job --job-name "$ATHENA_JOB" --job-update "{\"Role\":\"$ROLE_ARN\",\"Command\":$ATH_CMD,\"MaxCapacity\":0.0625,\"Timeout\":60,\"ExecutionProperty\":{\"MaxConcurrentRuns\":3}}"
 else
-  aws glue create-job --name "$ATHENA_JOB" --role "$ROLE_ARN" --command "$ATH_CMD" --max-capacity 0.0625 --timeout 60
+  aws glue create-job --name "$ATHENA_JOB" --role "$ROLE_ARN" --command "$ATH_CMD" --max-capacity 0.0625 --timeout 60 \
+    --execution-property MaxConcurrentRuns=3
 fi
 
 # ---------- 6. Step Functions state machine ----------
