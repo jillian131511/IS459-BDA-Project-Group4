@@ -7,7 +7,7 @@ Decisions made while running the pipeline on AWS, with the evidence behind each.
 The project belongs in the team account (`g2team4`, 050752609589, us-east-1), not an individual AWS Academy
 Learner Lab. Learner Lab is limited to USD 50, 32 vCPUs and 4-hour sessions, and has the ready-made `LabRole`.
 In the team account `infra/create_roles.sh` creates the equivalent (`aml-pipeline-role` + instance profile) and
-tags the default subnets for EMR's v2 service role. The data was re-downloaded there (same md5, so the same
+tags the default VPC and its subnets, and every cluster carries the tag `for-use-with-amazon-emr-managed-policies=true`: the account's EMR roles use AWS's v2 managed policies, which refuse untagged clusters and networks (two failed runs taught us this). The data was re-downloaded there (same md5, so the same
 file) and the official runs repeat there; because results are now identical run to run, every number above
 carries over. The Learner Lab copy is deleted afterwards.
 
