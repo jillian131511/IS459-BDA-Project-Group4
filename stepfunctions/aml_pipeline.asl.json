@@ -90,6 +90,8 @@
                 "JobFlowRole": "__EMR_EC2_PROFILE__",
                 "LogUri": "s3://__BUCKET__/emr-logs/",
                 "VisibleToAllUsers": true,
+                "AutoTerminationPolicy": {"IdleTimeout": 1800},
+                "Tags": [{"Key": "Project", "Value": "aml-g2"}],
                 "Instances": {
                   "KeepJobFlowAliveWhenNoSteps": true,
                   "InstanceGroups": [

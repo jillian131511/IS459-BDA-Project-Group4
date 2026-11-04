@@ -31,7 +31,7 @@ aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" --lifecycle-conf
 aws s3 cp glue/etl_transactions.py   "s3://$BUCKET/scripts/glue/etl_transactions.py"
 aws s3 cp glue/patterns_parser.py    "s3://$BUCKET/scripts/glue/patterns_parser.py"
 aws s3 cp athena/run_athena.py       "s3://$BUCKET/scripts/athena/run_athena.py"
-aws s3 cp athena/ --recursive --exclude "*" --include "*.sql" "s3://$BUCKET/scripts/athena/"
+aws s3 cp athena/ "s3://$BUCKET/scripts/athena/" --recursive --exclude "*" --include "*.sql"
 aws s3 cp emr/network_risk.py        "s3://$BUCKET/scripts/emr/network_risk.py"
 aws s3 cp emr/network_sql.py         "s3://$BUCKET/scripts/emr/network_sql.py"
 
