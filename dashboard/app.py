@@ -217,9 +217,30 @@ with tab_q2:
                               ("base_rate", "Random selection")]:
                 fig.add_trace(go.Bar(x=e.k.astype(str), y=e[col] * 100, name=name))
             fig.update_layout(barmode="group", height=330, margin=dict(t=30),
-                              title="Precision of top-k watchlist on HOLDOUT accounts (never used for calibration)",
+                              title="Same days: precision of top-k watchlist on HOLDOUT accounts (never used for calibration)",
                               xaxis_title="watchlist size k", yaxis_title="% truly involved in laundering")
             st.plotly_chart(fig, use_container_width=True)
+        # OFFICIAL figure (docs/decisions.md): accounts are scored from the learning days only and graded on
+        # whether they launder on the LATER days; the tail days (almost all laundering) are shown separately.
+        evt = load("q2_evaluation_time", variant)
+        if not evt.empty and (evt.n_holdout_bad > 0).any():
+            off = evt[evt.period == "official"].sort_values("k")
+            tail = evt[evt.period == "incl_tail"].set_index("k")
+            fig2 = go.Figure()
+            for col, name in [("precision_combined", "Combined scorecard (Q1 + Q2)"),
+                              ("precision_network_only", "Network motifs only"),
+                              ("precision_segment_only", "Channel rules only (Q1)"),
+                              ("base_rate", "Random selection")]:
+                fig2.add_trace(go.Bar(x=off.k.astype(str), y=off[col] * 100, name=name))
+            fig2.update_layout(barmode="group", height=330, margin=dict(t=30),
+                               title="OFFICIAL: flagged from the learning days, graded on the following days",
+                               xaxis_title="watchlist size k", yaxis_title="% laundering on the later days")
+            st.plotly_chart(fig2, use_container_width=True)
+            if 1000 in tail.index:
+                o1k = off.set_index("k").loc[1000]
+                st.caption(f"Top 1,000: {pct(o1k.precision_combined)} on the grading days vs {pct(o1k.base_rate, 2)} "
+                           f"at random. Including the tail days (almost all laundering): "
+                           f"{pct(tail.loc[1000, 'precision_combined'])} — we report the first figure.")
         c1, c2 = st.columns([3, 2])
         with c1:
             st.subheader("Investigator watchlist")

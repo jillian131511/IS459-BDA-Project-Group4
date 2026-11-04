@@ -20,8 +20,8 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | `athena/q1_*.sql`, `athena/ddl.sql`, `athena/run_athena.py` | Q1 analytics (UNLOAD to Parquet), table DDL with partition projection, CSV-vs-Parquet benchmark, per-query cost log | Athena via Glue Python shell |
 | `emr/network_sql.py`, `emr/network_risk.py` | Q2 graph motifs + scorecard + time-based evaluation, written as portable SQL steps; heavy steps checkpointed | Spark on a transient EMR cluster |
 | `stepfunctions/aml_pipeline.asl.json` | Orchestration: ETL → crawler → Q1 → (Q2 ∥ benchmark); auto-terminates EMR on failure | Step Functions |
-| `streaming/` | Kafka producer, consumer, scoring rules (`monitor_core.py`), EC2 Kafka setup | EC2 |
-| `dashboard/app.py` | Streamlit dashboard (Athena mode or local mode) | EC2 / laptop |
+| `streaming/` | Kafka producer, consumer, scoring rules (`monitor_core.py`), `run_live_demo.sh` | EC2 |
+| `dashboard/app.py`, `infra/launch_serving_ec2.sh` | Streamlit dashboard (Athena mode or local mode) and the serving EC2 that runs it next to Kafka | EC2 / laptop |
 | `infra/create_roles.sh`, `infra/setup.sh`, `infra/teardown.sh` | Pipeline IAM role (normal accounts only), one-shot deploy (idempotent), full clean-up | CloudShell |
 | `local/` | Synthetic data generator in the exact Kaggle format + local runners (SQLite) | laptop |
 | `tests/test_pipeline.py` | End-to-end local test suite (8 tests) | laptop |
@@ -68,14 +68,15 @@ aws stepfunctions start-execution --state-machine-arn <arn printed by setup.sh> 
 Experiments (other windows, `--lineage cache` for the before/after timing) run as extra EMR steps with
 `--out-prefix experiments/<tag>` so they never overwrite the official results in `analytics/`.
 
-### 4  Live monitor + dashboard (on the Kafka EC2)
+### 4  Dashboard + Kafka speed layer (one serving EC2)
 ```bash
-bash streaming/setup_kafka_ec2.sh
-python3 streaming/consumer.py --bucket $BUCKET --variant HI-Small &
-python3 streaming/producer.py --source s3://$BUCKET/raw/transactions/variant=HI-Small/HI-Small_Trans.csv \
-        --start 2022/09/08 --max-events 200000 --speed 3600
-DATA_MODE=athena BUCKET=$BUCKET streamlit run dashboard/app.py --server.port 8501
+bash infra/launch_serving_ec2.sh        # t3.large running Kafka (KRaft, 3 partitions) + Streamlit (Athena mode)
+                                        # as systemd services; prints http://<public-ip>:8501
+# live demo, run ON the server (Systems Manager -> Run Command, no SSH needed):
+bash /opt/aml/streaming/run_live_demo.sh <bucket> HI-Small 2022/09/08
+aws ec2 stop-instances --instance-ids <id>   # when nobody is using it; start-instances brings both services back
 ```
+The replay starts at the first official grading day, so the stream only contains days the batch layer never learned from.
 
 ### 5  After Week 13
 ```bash
@@ -83,18 +84,25 @@ bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR; then 
 ```
 Also delete the pipeline role (`aml-pipeline-role`, `aml-pipeline-profile`) and any IAM access keys made for the project.
 
-## Results so far (HI-Small, official run)
+## Results (official runs, team AWS account)
 
-| What | Result |
-|---|---|
-| Data quality | 5,078,345 rows in; 0 malformed; 9 duplicates; 0 rows without an FX rate (15 currencies incl. Bitcoin) |
-| Q1 | Large ACH transfers (10K-100K USD) dominate; top channel 209x the average rate. Reviewing 5 % of transfers catches 75 % of laundering (learning days) |
-| Q2, same days | Top 100 accounts: 64 % laundering accounts vs 1.0 % at random; top 1,000: 13.7 % |
-| Q2, next days (official, 8-10 Sep) | Top 1,000: 2.4 % vs 0.45 % at random (about 5x) |
-| Typologies caught | 163 of 370 laundering attempts (44 %) |
-| Tuning | Q2 on EMR 44 min -> about 3.6 min after checkpointing; identical watchlist |
-| Why 3 days | 1 -> 3 days nearly doubles same-days precision; 3 -> 7 adds 0.4 points and costs 39 % more path-join time |
-| Whole pipeline | about 16 min end to end (Glue 3 min, Athena 1 min, EMR start 5 min, Q2 3.6 min) |
+Learn on the first 70 % of the normal days, grade on the remaining 30 %; the tail days (almost all laundering)
+are reported separately (`docs/decisions.md`).
+
+| What | HI-Large (179.7M rows, 97 days) | HI-Small (5.1M rows, 10 days) |
+|---|---|---|
+| Learn / grade | 1 Aug - 7 Oct / 8 Oct - 5 Nov 2022 | 1 - 7 Sep / 8 - 10 Sep 2022 |
+| Data quality | 0 malformed, 150 duplicates, 0 rows without an FX rate | 0 malformed, 9 duplicates, 0 without FX |
+| Q1: laundering caught by reviewing the riskiest 5 % of transfers | 76.7 % | 75.0 % |
+| Q2 official, top 100 accounts | **67 %** vs 4.7 % at random | 3.0 % vs 0.45 % at random |
+| Q2 official, top 1,000 accounts | **18.8 %** (4x random) | 2.4 % (5x random) |
+| Q2 same days, top 100 | 71 % | 64 % |
+| Q2 compute (Spark) | 159 s on 9 x m5.2xlarge | 124 s on 3 x m5.xlarge |
+| Whole pipeline, one click | 21 min (Glue 6 min with 10 workers) | 16 min |
+
+Tuning evidence (HI-Small): checkpointing cut Q2 on EMR from 44 to about 3.6 minutes with an identical
+watchlist. Window evidence: 1 -> 3 days nearly doubles same-days precision; 3 -> 7 days adds 0.4 points and costs
+39 % more path-join time.
 
 ## Design highlights
 * **Portable SQL, tested locally.** Q1 SQL runs unchanged in Athena and SQLite; Q2 SQL runs unchanged in Spark SQL and SQLite, so the exact logic deployed was tested on a laptop first.

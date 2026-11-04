@@ -21,7 +21,7 @@ Each member logs into the team console with the group login (never with the IAM 
 | Time | Presenter | What is on screen |
 |---|---|---|
 | 0:00-1:30 | Member 1 | Recap: two questions, users, architecture slide |
-| 1:30-3:00 | Member 2 | S3 raw zone + an ingestion manifest; Step Functions graph of the finished official HI-Medium run (all green) |
+| 1:30-3:00 | Member 2 | S3 raw zone + an ingestion manifest; Step Functions graph of the finished official HI-Large run (all green) |
 | 3:00-4:30 | Member 3 | Glue job run details; curated Parquet day folders; `aml.dq_report` in Athena |
 | 4:30-6:30 | Member 4 | Dashboard Q1 tab: move the budget slider live; heatmaps; CSV vs Parquet bytes scanned |
 | 6:30-9:00 | Member 5 | Dashboard Q2 tab: grading table (same days vs 8-10 Sep); watchlist; one account in the money-trail explorer; the tuning and window tables |
@@ -49,24 +49,44 @@ The resources already exist, so every command below **updates** them (all script
    grep -E "^export (BUCKET|PIPELINE_ROLE|INSTANCE_PROFILE)" infra/config.env
    ```
    Expected: the three lines with `is459-g2-aml-050752609589`, `aml-pipeline-role`, `aml-pipeline-profile`.
-4. `bash infra/create_roles.sh` → ends with `role=aml-pipeline-role instance_profile=aml-pipeline-profile ready` (30 s).
-5. `bash infra/setup.sh` → 12 lines ending `"state": "SUCCEEDED"`, the two Glue job names, the `aml-pipeline`
-   ARN, `Deployed.` Then show in the console: S3 bucket, Glue → Data Catalog → `aml` tables, Glue → ETL jobs,
-   Glue → Crawlers, Step Functions → `aml-pipeline` → Graph view (2 min).
+   Say once: *"Our pipeline is already deployed, so the scripts update each resource in place. On a fresh
+   account the same commands create them from scratch."*
+4. `bash infra/create_roles.sh` → only the last line, `role=aml-pipeline-role instance_profile=aml-pipeline-profile ready`
+   (everything already exists) (30 s).
+5. `bash infra/setup.sh` → upload lines, 12 lines ending `"state": "SUCCEEDED"`, `{"JobName": "aml-etl-transactions"}`
+   and `{"JobName": "aml-athena-runner"}` (updated, not created), an `"updateDate"` for the state machine, then
+   `Deployed.` (no `"Location"` line: the bucket already exists). Then show in the console: S3 bucket, Glue → Data
+   Catalog → `aml` tables, Glue → ETL jobs, Glue → Crawlers, Step Functions → `aml-pipeline` → Graph view (2 min).
+5b. Step Functions → `aml-pipeline` → Graph view → click **Create transient EMR cluster** → its definition
+   (instance type and count, auto-termination, tags). Say: *"Q2's Spark cluster is not kept running. The pipeline
+   creates it for each run and deletes it afterwards, so it only costs while it works."* (30 s)
 6. `export KAGGLE_API_TOKEN=KGAT_...` (own token) → `bash infra/launch_ingestion_ec2.sh HI-Small` →
    EC2 → Instances: `aml-ingest` Running, then Terminated after ~2 min (2 min, speed up the wait).
 7. `source infra/config.env && aws s3 cp s3://$BUCKET/raw/_manifests/HI-Small_Trans.json -` → `"lines":5078346`,
    `"md5":"9667f3a6323e6ad88e699acf42db9157"` — the same fingerprint as every earlier download (1 min).
+8. Dashboard + Kafka server. The team's server already exists, so do **not** launch a second one: show
+   `infra/launch_serving_ec2.sh` on GitHub and say *"one command starts a small EC2 that runs Kafka and the
+   dashboard as services"*. Then EC2 → Instances → `aml-serving` (Running) → its **Security** tab (port 8501 open)
+   → open `http://<public IP>:8501` in a new tab and show the sidebar's data source `athena` (1 min).
+9. Kafka: Systems Manager → **Run Command** is how we control the server without SSH. Show the topic:
+   Run Command → `AWS-RunShellScript` → target `aml-serving` → command
+   `/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic aml-transactions`
+   → output shows `PartitionCount: 3` (1 min).
+10. Close on the architecture diagram: point at each box and name what was just created — the bucket, the Glue
+   job and crawler, the Athena tables, the Step Functions pipeline (with EMR inside it), the ingestion EC2 and
+   the serving EC2 (30 s).
 
-## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records the official HI-Medium run
+## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records an HI-Large run
 
 1. Step Functions → `aml-pipeline` → **Start execution**, input
-   `{"variant":"HI-Medium","core_nodes":4,"run_benchmark":true,"train_until":"<from Member 3>","test_until":"<from Member 3>","window_days":"3"}`;
-   narrate each state as it turns green, speed up the waiting (3 min).
-2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Medium' ORDER BY risk_rank LIMIT 10` and
-   `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Medium' ORDER BY period, k` (1 min).
+   `{"variant":"HI-Large","core_nodes":8,"instance_type":"m5.2xlarge","run_benchmark":true,"train_until":"2022-10-08","test_until":"2022-11-06","window_days":"3"}`;
+   narrate each state as it turns green, speed up the waiting (3 min). The run takes about 21 min and
+   costs about USD 2; it rewrites the same official results, so the numbers stay the same.
+2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Large' ORDER BY risk_rank LIMIT 10` and
+   `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Large' ORDER BY period, k` (1 min).
 3. Dashboard: Q1 tab (slider) and Q2 tab (watchlist, money trail) (2 min).
-4. Kafka: consumer + producer, alerts arriving (1 min) — only if built.
+4. Kafka: Systems Manager → Run Command on `aml-serving`: `bash /opt/aml/streaming/run_live_demo.sh is459-g2-aml-050752609589 HI-Small 2022/09/08`
+   → the dashboard **Live** tab fills with alerts (1 min).
 5. S3 `analytics/run_log/`: bytes scanned and cost per query (30 s).
 
 Record every attempt; keep the clean one. Upload both videos to YouTube (unlisted) and add the links to the

@@ -28,7 +28,8 @@ else
 fi
 
 for P in service-role/AWSGlueServiceRole AmazonS3FullAccess AmazonAthenaFullAccess \
-         AmazonEMRFullAccessPolicy_v2 CloudWatchLogsFullAccess AmazonEventBridgeFullAccess; do
+         AmazonEMRFullAccessPolicy_v2 CloudWatchLogsFullAccess AmazonEventBridgeFullAccess \
+         AmazonSSMManagedInstanceCore; do   # SSM: manage the serving EC2 without SSH
   aws iam attach-role-policy --role-name "$ROLE" --policy-arn "arn:aws:iam::aws:policy/$P"
 done
 # Step Functions must be allowed to hand the EMR roles (and this role, for Glue) to the services it starts
@@ -45,8 +46,10 @@ aws iam get-instance-profile --instance-profile-name "$PROFILE" --query "Instanc
 # EMR default roles (created once per account); harmless if they already exist
 aws iam get-role --role-name "$EMR_SERVICE_ROLE" >/dev/null 2>&1 || aws emr create-default-roles >/dev/null
 
-# AmazonEMRServicePolicy_v2 only launches into subnets tagged for EMR-managed policies
+# AmazonEMRServicePolicy_v2 only creates its security groups in a VPC, and launches into subnets, that carry
+# this tag. Tag the default VPC and its default subnets.
+VPC=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true --query "Vpcs[0].VpcId" --output text)
 SUBNETS=$(aws ec2 describe-subnets --filters Name=default-for-az,Values=true --query "Subnets[].SubnetId" --output text)
-[ -n "$SUBNETS" ] && aws ec2 create-tags --resources $SUBNETS --tags Key=for-use-with-amazon-emr-managed-policies,Value=true
+[ "$VPC" != "None" ] && aws ec2 create-tags --resources $VPC $SUBNETS --tags Key=for-use-with-amazon-emr-managed-policies,Value=true
 
 echo "role=$ROLE instance_profile=$PROFILE ready (IAM changes can take ~10 s to apply)"
