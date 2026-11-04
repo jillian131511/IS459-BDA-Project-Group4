@@ -61,48 +61,57 @@ def main():
     print(f"model loaded: {len(model.watch)} watchlist accounts, {len(model.hot)} hot segments, "
           f"{len(model.hubs)} hubs, velocity k={a.velocity_k}, {len(fx)} currencies")
 
+    # consumer_timeout_ms ends the iteration when the stream goes quiet, so the last figures are saved too
     consumer = KafkaConsumer(a.topic, bootstrap_servers=a.bootstrap, group_id=a.group,
-                             auto_offset_reset="earliest", enable_auto_commit=True,
+                             auto_offset_reset="earliest", enable_auto_commit=True, consumer_timeout_ms=5000,
                              value_deserializer=lambda b: json.loads(b.decode()))
     os.makedirs(OUT, exist_ok=True)
     local = open(os.path.join(OUT, "alerts.jsonl"), "a")
     buffer, latencies = [], []
     n_seen = n_alerts = n_true = 0
     last_flush = time.time()
-    for msg in consumer:
-        ev = msg.value
-        t = {"src_id": f"{ev['from_bank'].lstrip('0') or '0'}:{ev['from_account'].upper()}",
-             "dst_id": f"{ev['to_bank'].lstrip('0') or '0'}:{ev['to_account'].upper()}",
-             "from_bank": ev["from_bank"].lstrip("0"), "to_bank": ev["to_bank"].lstrip("0"),
-             "ts": ev["ts_raw"], "ts_epoch": time.mktime(time.strptime(ev["ts_raw"], "%Y/%m/%d %H:%M")),
-             "amount_usd": round(float(ev["amount_paid"]) / fx.get(ev["payment_currency"], 1.0), 2),
-             "payment_format": ev["payment_format"], "payment_currency": ev["payment_currency"],
-             "receiving_currency": ev["receiving_currency"], "is_laundering": int(ev["is_laundering"]),
-             "partition": msg.partition}
-        n_seen += 1
-        alert = model.score(t)
-        latencies.append((time.time() - ev["produced_at"]) * 1000)
-        if alert:
-            n_alerts += 1
-            n_true += alert["is_laundering"]  # label used ONLY to report alert precision on the dashboard
-            alert["alerted_at"] = time.time()
-            local.write(json.dumps(alert) + "\n")
-            buffer.append(alert)
-        if time.time() - last_flush >= a.flush_secs:
-            local.flush()
-            lat = latencies[-5000:]
-            stats = {"events": n_seen, "alerts": n_alerts, "alert_rate": n_alerts / max(n_seen, 1),
-                     "alert_precision": n_true / max(n_alerts, 1),
-                     "latency_ms_p50": round(statistics.median(lat), 1) if lat else None,
-                     "latency_ms_p95": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 1) if lat else None,
-                     "updated_at": time.time()}
-            json.dump(stats, open(os.path.join(OUT, "stats.json"), "w"))
-            if buffer:
-                key = f"streaming/alerts/variant={a.variant}/alerts_{int(time.time())}_{os.getpid()}.json"
-                s3.put_object(Bucket=a.bucket, Key=key, Body="\n".join(json.dumps(x) for x in buffer).encode())
-                buffer = []
-            print(stats)
-            last_flush = time.time()
+
+    def flush():
+        nonlocal buffer, last_flush
+        local.flush()
+        lat = latencies[-5000:]
+        stats = {"events": n_seen, "alerts": n_alerts, "alert_rate": n_alerts / max(n_seen, 1),
+                 "alert_precision": n_true / max(n_alerts, 1),
+                 "latency_ms_p50": round(statistics.median(lat), 1) if lat else None,
+                 "latency_ms_p95": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 1) if lat else None,
+                 "updated_at": time.time()}
+        json.dump(stats, open(os.path.join(OUT, "stats.json"), "w"))
+        if buffer:
+            key = f"streaming/alerts/variant={a.variant}/alerts_{int(time.time())}_{os.getpid()}.json"
+            s3.put_object(Bucket=a.bucket, Key=key, Body="\n".join(json.dumps(x) for x in buffer).encode())
+            buffer = []
+        print(stats, flush=True)
+        last_flush = time.time()
+
+    while True:
+        for msg in consumer:
+            ev = msg.value
+            t = {"src_id": f"{ev['from_bank'].lstrip('0') or '0'}:{ev['from_account'].upper()}",
+                 "dst_id": f"{ev['to_bank'].lstrip('0') or '0'}:{ev['to_account'].upper()}",
+                 "from_bank": ev["from_bank"].lstrip("0"), "to_bank": ev["to_bank"].lstrip("0"),
+                 "ts": ev["ts_raw"], "ts_epoch": time.mktime(time.strptime(ev["ts_raw"], "%Y/%m/%d %H:%M")),
+                 "amount_usd": round(float(ev["amount_paid"]) / fx.get(ev["payment_currency"], 1.0), 2),
+                 "payment_format": ev["payment_format"], "payment_currency": ev["payment_currency"],
+                 "receiving_currency": ev["receiving_currency"], "is_laundering": int(ev["is_laundering"]),
+                 "partition": msg.partition}
+            n_seen += 1
+            alert = model.score(t)
+            latencies.append((time.time() - ev["produced_at"]) * 1000)
+            if alert:
+                n_alerts += 1
+                n_true += alert["is_laundering"]  # label used ONLY to report alert precision on the dashboard
+                alert["alerted_at"] = time.time()
+                local.write(json.dumps(alert) + "\n")
+                buffer.append(alert)
+            if time.time() - last_flush >= a.flush_secs:
+                flush()
+        if n_seen and (buffer or time.time() - last_flush >= a.flush_secs):
+            flush()
 
 
 if __name__ == "__main__":

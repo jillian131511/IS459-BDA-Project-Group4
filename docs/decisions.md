@@ -21,6 +21,12 @@ as the Kafka consumer (`streaming/monitor_core.py`):
 transfers. The velocity rule itself adds little on top of the channel and watchlist rules (3,652 alerts, 13 real);
 it is kept for the schemes those rules cannot see yet.
 
+Live replay through Kafka after the fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer now skips
+rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
+inflate the alert precision on the Live tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
+the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. The whole-day figure above
+(2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
+
 ## 2026-11-04 · Speed layer works; the velocity rule is too noisy (fixed above)
 
 Kafka (KRaft, 3 partitions) and the dashboard run on one t3.large (`infra/launch_serving_ec2.sh`). Replay of
