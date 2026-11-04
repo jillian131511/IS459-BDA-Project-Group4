@@ -2,6 +2,16 @@
 
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 
+## 2026-11-04 · HI-Large is run in full (the pitch's 180 million transfers)
+
+The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run instead of HI-Medium. It has the
+same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of a few hundred to a
+few thousand transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
+(1 Aug - 7 Oct), official grading on the rest (8 Oct - 5 Nov), tail reported separately.
+Resources: Glue with 10 G.1X workers (6 min), EMR 9 x m5.2xlarge (Q2 compute 159 s). Before the run the
+watchlist-edges step was rewritten from an OR join (a nested loop: about 30 billion comparisons at this size) to two
+equi-joins, with identical output. Official top-1,000 precision 18.8 % against 4.7 % at random.
+
 ## 2026-11-04 · The pipeline runs in the team AWS account, not Learner Lab
 
 The project belongs in the team account (`g2team4`, 050752609589, us-east-1), not an individual AWS Academy

@@ -35,6 +35,9 @@ def main():
     ap.add_argument("--bootstrap", default="localhost:9092")
     ap.add_argument("--topic", default="aml-transactions")
     ap.add_argument("--start", default="", help="skip rows before this timestamp prefix, e.g. 2022/09/09")
+    ap.add_argument("--end", default="", help="skip rows from this timestamp prefix on, e.g. 2022/09/11")
+    ap.add_argument("--max-wait", type=float, default=0.5,
+                    help="longest pause between two events (s); the raw file is only roughly in time order")
     ap.add_argument("--max-events", type=int, default=100000)
     ap.add_argument("--speed", type=float, default=3600.0)
     a = ap.parse_args()
@@ -46,16 +49,17 @@ def main():
     next(reader)  # header
     sent, first_event_ts, t0 = 0, None, time.time()
     for row in reader:
-        if len(row) < 11 or row[0] < a.start:
+        if len(row) < 11 or row[0] < a.start or (a.end and row[0] >= a.end):
             continue
         ev = dict(zip(COLS, row))
         event_ts = time.mktime(time.strptime(ev["ts_raw"], "%Y/%m/%d %H:%M"))
         if first_event_ts is None:
             first_event_ts = event_ts
         # pace the replay: wait until this event's (scaled) time has come
+        # (a few later-dated rows sit early in the file, so one pause is capped instead of waiting for "hours")
         due = t0 + (event_ts - first_event_ts) / a.speed
         if due > time.time():
-            time.sleep(due - time.time())
+            time.sleep(min(due - time.time(), a.max_wait))
         ev["produced_at"] = time.time()
         producer.send(a.topic, key=f"{ev['from_bank']}:{ev['from_account']}", value=ev)
         sent += 1

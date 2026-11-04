@@ -21,7 +21,7 @@ Each member logs into the team console with the group login (never with the IAM 
 | Time | Presenter | What is on screen |
 |---|---|---|
 | 0:00-1:30 | Member 1 | Recap: two questions, users, architecture slide |
-| 1:30-3:00 | Member 2 | S3 raw zone + an ingestion manifest; Step Functions graph of the finished official HI-Medium run (all green) |
+| 1:30-3:00 | Member 2 | S3 raw zone + an ingestion manifest; Step Functions graph of the finished official HI-Large run (all green) |
 | 3:00-4:30 | Member 3 | Glue job run details; curated Parquet day folders; `aml.dq_report` in Athena |
 | 4:30-6:30 | Member 4 | Dashboard Q1 tab: move the budget slider live; heatmaps; CSV vs Parquet bytes scanned |
 | 6:30-9:00 | Member 5 | Dashboard Q2 tab: grading table (same days vs 8-10 Sep); watchlist; one account in the money-trail explorer; the tuning and window tables |
@@ -76,15 +76,17 @@ The resources already exist, so every command below **updates** them (all script
    job and crawler, the Athena tables, the Step Functions pipeline (with EMR inside it), the ingestion EC2 and
    the serving EC2 (30 s).
 
-## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records the official HI-Medium run
+## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records an HI-Large run
 
 1. Step Functions → `aml-pipeline` → **Start execution**, input
-   `{"variant":"HI-Medium","core_nodes":4,"run_benchmark":true,"train_until":"<from Member 3>","test_until":"<from Member 3>","window_days":"3"}`;
-   narrate each state as it turns green, speed up the waiting (3 min).
-2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Medium' ORDER BY risk_rank LIMIT 10` and
-   `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Medium' ORDER BY period, k` (1 min).
+   `{"variant":"HI-Large","core_nodes":8,"instance_type":"m5.2xlarge","run_benchmark":true,"train_until":"2022-10-08","test_until":"2022-11-06","window_days":"3"}`;
+   narrate each state as it turns green, speed up the waiting (3 min). The run takes about 21 min and
+   costs about USD 2; it rewrites the same official results, so the numbers stay the same.
+2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Large' ORDER BY risk_rank LIMIT 10` and
+   `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Large' ORDER BY period, k` (1 min).
 3. Dashboard: Q1 tab (slider) and Q2 tab (watchlist, money trail) (2 min).
-4. Kafka: consumer + producer, alerts arriving (1 min) — only if built.
+4. Kafka: Systems Manager → Run Command on `aml-serving`: `bash /opt/aml/streaming/run_live_demo.sh is459-g2-aml-050752609589 HI-Small 2022/09/08`
+   → the dashboard **Live** tab fills with alerts (1 min).
 5. S3 `analytics/run_log/`: bytes scanned and cost per query (30 s).
 
 Record every attempt; keep the clean one. Upload both videos to YouTube (unlisted) and add the links to the
