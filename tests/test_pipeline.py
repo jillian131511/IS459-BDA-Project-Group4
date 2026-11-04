@@ -72,6 +72,19 @@ class Pipeline(unittest.TestCase):
         self.assertTrue(w.risk_probability.between(0, 1).all())
         self.assertTrue(w.risk_rank.is_monotonic_increasing)
 
+    def test_q2_time_based_grading(self):
+        """Learn on early days, grade on later days (docs/decisions.md): both periods present and sane."""
+        out = os.path.join(self.tmp, "analytics_time")
+        sh("local/run_local.py", "--curated", self.cur, "--out", out, "--variant", "T",
+           "--train-until", "2022-09-08", "--test-until", "2022-09-10")
+        e = pd.read_csv(f"{out}/q2_evaluation_time.csv")
+        self.assertEqual(set(e.period), {"official", "incl_tail"})
+        self.assertTrue(e.precision_combined.between(0, 1).all())
+        off = e[e.period == "official"].set_index("k")
+        tail = e[e.period == "incl_tail"].set_index("k")
+        # the wider period can only contain the same or more laundering accounts
+        self.assertTrue((tail.n_holdout_bad >= off.n_holdout_bad).all())
+
     def test_streaming_rules(self):
         wl = "acct,risk_rank,risk_probability,reasons\n1:A,1,0.9,Part of 1 money cycle\n"
         seg = ("payment_format,payment_currency,is_cross_bank,is_cross_currency,amount_band,lift,wilson_lb\n"

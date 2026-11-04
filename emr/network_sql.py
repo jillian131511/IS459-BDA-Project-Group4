@@ -154,7 +154,7 @@ FROM (SELECT src_id AS acct, is_laundering FROM edges
       SELECT dst_id AS acct, is_laundering FROM edges) u
 GROUP BY acct
 """),
-    # 12. One row per account with its red-flag features. Accounts are split 50/50 by the last hex digit of
+    # 12. One row per account with its red-flag features. Accounts are split 50/50 by a hex digit of
     #     the account id: CALIBRATION accounts are used to learn how much each flag is worth, HOLDOUT
     #     accounts are used only to measure performance -> no label leakage in the reported numbers.
     ("account_features", """
@@ -173,7 +173,9 @@ SELECT s.acct, s.max_daily_fan_out, s.max_daily_fan_in, s.gather_scatter_day, s.
        CASE WHEN COALESCE(x.seg_lift_avg, 0) >= 10 THEN 3
             WHEN COALESCE(x.seg_lift_avg, 0) >= 3 THEN 2
             WHEN COALESCE(x.seg_lift_avg, 0) >= 1 THEN 1 ELSE 0 END AS f_segment,
-       CASE WHEN substr(s.acct, -1) IN ('0','2','4','6','8','A','C','E') THEN 'calibration' ELSE 'holdout' END AS split,
+       -- 2nd-to-last character: evenly spread over 0-F. (The LAST character is '0' for ~97% of IBM AML account
+       -- ids, which made the "holdout half" only 3% of accounts - found on the first HI-Small run.)
+       CASE WHEN substr(s.acct, -2, 1) IN ('0','2','4','6','8','A','C','E') THEN 'calibration' ELSE 'holdout' END AS split,
        t.is_bad
 FROM account_stats s
 JOIN truth t ON t.acct = s.acct
@@ -257,6 +259,32 @@ CROSS JOIN (SELECT 50 AS k UNION ALL SELECT 100 UNION ALL SELECT 250 UNION ALL S
 WHERE a.split = 'holdout'
 GROUP BY k.k
 """),
+    # 14b. TIME-BASED evaluation (the official figure). Accounts are scored using ONLY the learning days
+    #      (before --train-until); we then check which holdout accounts touch laundering in the FUTURE.
+    #      period 'official'  = train_until <= day < test_until  (HI-Small: 8-10 Sep, a realistic mix of days)
+    #      period 'incl_tail' = every day from train_until on   (adds 11-18 Sep, almost all laundering tails)
+    #      future_truth is supplied by the engine (empty when no train_until is given). See docs/decisions.md.
+    ("evaluation_time", """
+SELECT period, k.k,
+       CAST(SUM(CASE WHEN rank_combined <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / k.k AS precision_combined,
+       CAST(SUM(CASE WHEN rank_network  <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / k.k AS precision_network_only,
+       CAST(SUM(CASE WHEN rank_segment  <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / k.k AS precision_segment_only,
+       CAST(SUM(is_bad) AS DOUBLE) / COUNT(*) AS base_rate,
+       CAST(SUM(CASE WHEN rank_combined <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / NULLIF(SUM(is_bad), 0) AS recall_combined,
+       COUNT(*) AS n_holdout_accounts, SUM(is_bad) AS n_holdout_bad
+FROM (
+    SELECT per.period, a.rank_combined, a.rank_network, a.rank_segment,
+           CASE WHEN per.period = 'official' THEN COALESCE(f.is_bad_official, 0)
+                ELSE COALESCE(f.is_bad_all, 0) END AS is_bad
+    FROM account_ranked a
+    CROSS JOIN (SELECT 'official' AS period UNION ALL SELECT 'incl_tail') per
+    LEFT JOIN future_truth f ON f.acct = a.acct
+    WHERE a.split = 'holdout'
+) z
+CROSS JOIN (SELECT 50 AS k UNION ALL SELECT 100 UNION ALL SELECT 250 UNION ALL SELECT 500
+            UNION ALL SELECT 1000 UNION ALL SELECT 2500) k
+GROUP BY period, k.k
+"""),
     ("signal_precision", """
 SELECT w.signal, w.value, w.woe, w.n_cal, w.n_cal_bad,
        CAST(w.n_cal_bad AS DOUBLE) / w.n_cal AS precision_calibration
@@ -297,7 +325,7 @@ WHERE rn <= 40
 ]
 
 # Tables persisted as outputs (everything else is an intermediate view)
-OUTPUTS = ["watchlist", "watchlist_edges", "evaluation", "signal_precision", "pattern_coverage"]
+OUTPUTS = ["watchlist", "watchlist_edges", "evaluation", "evaluation_time", "signal_precision", "pattern_coverage"]
 
 DEFAULT_PARAMS = {
     "window_days": 3,              # laundering hops must follow each other within 3 days
@@ -313,3 +341,16 @@ DEFAULT_PARAMS = {
 def render(sql, params):
     offsets = " UNION ALL ".join(f"SELECT {i} AS o" for i in range(int(params["window_days"]) + 1))
     return sql.format(offsets_sql=offsets, **params)
+
+
+# Built by the engine from ALL transactions (not just the learning days) before the steps run.
+# {train_until} / {test_until} are 'YYYY-MM-DD'; with no --train-until the engine creates it empty.
+FUTURE_TRUTH_SQL = """
+SELECT acct,
+       MAX(CASE WHEN txn_date < '{test_until}' THEN is_laundering ELSE 0 END) AS is_bad_official,
+       MAX(is_laundering) AS is_bad_all
+FROM (SELECT src_id AS acct, txn_date, is_laundering FROM transactions_all WHERE txn_date >= '{train_until}'
+      UNION ALL
+      SELECT dst_id AS acct, txn_date, is_laundering FROM transactions_all WHERE txn_date >= '{train_until}') u
+GROUP BY acct
+"""

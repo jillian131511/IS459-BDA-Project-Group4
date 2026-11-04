@@ -7,7 +7,8 @@
 # unzipped archive into S3 - no second copy on disk.
 #
 #   export BUCKET=is459-g2-aml-<yourname>
-#   export KAGGLE_USERNAME=... KAGGLE_KEY=...          # from kaggle.com -> Settings -> API -> Create New Token
+#   export KAGGLE_API_TOKEN=KGAT_...                   # kaggle.com -> Settings -> API -> Create New Token
+#   (legacy kaggle.json users: export KAGGLE_USERNAME=... KAGGLE_KEY=... instead)
 #   bash ingestion/download_to_s3.sh HI-Small          # dev
 #   bash ingestion/download_to_s3.sh HI-Large          # final demo (allow ~20-30 min)
 #
@@ -23,7 +24,9 @@ DATASET="ealtman2019/ibm-transactions-for-anti-money-laundering-aml"
 WORK="${WORK_DIR:-$HOME/aml_ingest}"
 mkdir -p "$WORK" && cd "$WORK"
 
-command -v kaggle >/dev/null || pip3 install --user --quiet kaggle
+# kaggle 2.x (needed for KGAT_ tokens) needs a newer Python than Amazon Linux 2023's default 3.9
+PY=$(command -v python3.11 || command -v python3)
+command -v kaggle >/dev/null || "$PY" -m pip install --user --quiet kaggle six   # six: missing dependency of kaggle 2.x
 export PATH="$HOME/.local/bin:$PATH"
 
 for KIND in Trans Patterns; do
