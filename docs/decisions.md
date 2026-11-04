@@ -2,6 +2,25 @@
 
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 
+## 2026-11-04 · The Q2 time window stays at 3 days (evidence)
+
+Same HI-Small data, same cluster (3 × m5.xlarge), only `--window-days` changed. Learn on 1–7 Sep.
+Precision = share of the top-k holdout accounts that are laundering accounts (205,988 holdout accounts).
+
+| Window | Q2 compute | Path-join step | Same days, top 500 | Same days, top 1,000 | Next days (8–10 Sep), top 1,000 | Typology attempts detected |
+|---|---|---|---|---|---|---|
+| 1 day | 120.7 s | 9.5 s | 12.0 % | 8.7 % | 2.2 % | 142 / 370 |
+| **3 days** | 124.1 s | 11.3 s | **21.8 %** | **13.7 %** | 2.4 % | **163 / 370** |
+| 7 days | 129.7 s | 15.7 s | 22.2 % | 14.1 % | 2.4 % | 157 / 370 |
+
+Random picking: 1.0 % (same days) and 0.45 % (8–10 Sep).
+
+**Reading.** Going from 1 to 3 days nearly doubles precision on the same days and finds the most laundering
+attempts. Going from 3 to 7 days adds almost nothing (+0.4 points) and finds fewer attempts (more chance links
+crowd the list), while the path-join step costs 39 % more. So 3 days is where the benefit levels off.
+The window barely changes next-days precision (all ≈5× random): predicting which accounts launder *next* is
+harder than spotting schemes already under way — reported honestly as the official figure.
+
 ## 2026-11-04 · Q2 accounts are split on the 2nd-to-last character of the account id
 
 **Finding.** The scorecard learns on "calibration" accounts and is graded on "holdout" accounts, split by
