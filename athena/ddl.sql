@@ -66,6 +66,13 @@ LOCATION 's3://{bucket}/analytics/q2_evaluation/'
 TBLPROPERTIES ('projection.enabled'='true', 'projection.variant.type'='injected',
   'storage.location.template'='s3://{bucket}/analytics/q2_evaluation/variant=${variant}/');
 
+CREATE EXTERNAL TABLE IF NOT EXISTS aml.q2_evaluation_time (period string, k bigint, precision_combined double, precision_network_only double, precision_segment_only double, base_rate double, recall_combined double, n_holdout_accounts bigint, n_holdout_bad bigint)
+PARTITIONED BY (variant string)
+STORED AS PARQUET
+LOCATION 's3://{bucket}/analytics/q2_evaluation_time/'
+TBLPROPERTIES ('projection.enabled'='true', 'projection.variant.type'='injected',
+  'storage.location.template'='s3://{bucket}/analytics/q2_evaluation_time/variant=${variant}/');
+
 CREATE EXTERNAL TABLE IF NOT EXISTS aml.q2_signal_precision (signal string, value bigint, woe double, n_cal bigint, n_cal_bad bigint, precision_calibration double)
 PARTITIONED BY (variant string)
 STORED AS PARQUET

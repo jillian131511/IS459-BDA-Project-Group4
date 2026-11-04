@@ -6,7 +6,7 @@
       "Type": "Pass",
       "Comment": "Merge user input over defaults so every field is always present",
       "Parameters": {
-        "defaults": {"variant": "HI-Small", "core_nodes": 2, "instance_type": "m5.xlarge", "run_benchmark": false, "train_until": "none"},
+        "defaults": {"variant": "HI-Small", "core_nodes": 2, "instance_type": "m5.xlarge", "run_benchmark": false, "train_until": "none", "test_until": "none", "window_days": "3"},
         "input.$": "$"
       },
       "ResultPath": "$",
@@ -114,7 +114,7 @@
                   "ActionOnFailure": "CONTINUE",
                   "HadoopJarStep": {
                     "Jar": "command-runner.jar",
-                    "Args.$": "States.Array('spark-submit', '--deploy-mode', 'cluster', '--py-files', 's3://__BUCKET__/scripts/emr/network_sql.py', 's3://__BUCKET__/scripts/emr/network_risk.py', '--bucket', '__BUCKET__', '--variant', $.cfg.variant, '--train-until', $.cfg.train_until)"
+                    "Args.$": "States.Array('spark-submit', '--deploy-mode', 'cluster', '--py-files', 's3://__BUCKET__/scripts/emr/network_sql.py', 's3://__BUCKET__/scripts/emr/network_risk.py', '--bucket', '__BUCKET__', '--variant', $.cfg.variant, '--train-until', $.cfg.train_until, '--test-until', $.cfg.test_until, '--window-days', $.cfg.window_days)"
                   }
                 }
               },

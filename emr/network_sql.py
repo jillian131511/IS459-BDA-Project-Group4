@@ -257,6 +257,32 @@ CROSS JOIN (SELECT 50 AS k UNION ALL SELECT 100 UNION ALL SELECT 250 UNION ALL S
 WHERE a.split = 'holdout'
 GROUP BY k.k
 """),
+    # 14b. TIME-BASED evaluation (the official figure). Accounts are scored using ONLY the learning days
+    #      (before --train-until); we then check which holdout accounts touch laundering in the FUTURE.
+    #      period 'official'  = train_until <= day < test_until  (HI-Small: 8-10 Sep, a realistic mix of days)
+    #      period 'incl_tail' = every day from train_until on   (adds 11-18 Sep, almost all laundering tails)
+    #      future_truth is supplied by the engine (empty when no train_until is given). See docs/decisions.md.
+    ("evaluation_time", """
+SELECT period, k.k,
+       CAST(SUM(CASE WHEN rank_combined <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / k.k AS precision_combined,
+       CAST(SUM(CASE WHEN rank_network  <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / k.k AS precision_network_only,
+       CAST(SUM(CASE WHEN rank_segment  <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / k.k AS precision_segment_only,
+       CAST(SUM(is_bad) AS DOUBLE) / COUNT(*) AS base_rate,
+       CAST(SUM(CASE WHEN rank_combined <= k.k THEN is_bad ELSE 0 END) AS DOUBLE) / NULLIF(SUM(is_bad), 0) AS recall_combined,
+       COUNT(*) AS n_holdout_accounts, SUM(is_bad) AS n_holdout_bad
+FROM (
+    SELECT per.period, a.rank_combined, a.rank_network, a.rank_segment,
+           CASE WHEN per.period = 'official' THEN COALESCE(f.is_bad_official, 0)
+                ELSE COALESCE(f.is_bad_all, 0) END AS is_bad
+    FROM account_ranked a
+    CROSS JOIN (SELECT 'official' AS period UNION ALL SELECT 'incl_tail') per
+    LEFT JOIN future_truth f ON f.acct = a.acct
+    WHERE a.split = 'holdout'
+) z
+CROSS JOIN (SELECT 50 AS k UNION ALL SELECT 100 UNION ALL SELECT 250 UNION ALL SELECT 500
+            UNION ALL SELECT 1000 UNION ALL SELECT 2500) k
+GROUP BY period, k.k
+"""),
     ("signal_precision", """
 SELECT w.signal, w.value, w.woe, w.n_cal, w.n_cal_bad,
        CAST(w.n_cal_bad AS DOUBLE) / w.n_cal AS precision_calibration
@@ -297,7 +323,7 @@ WHERE rn <= 40
 ]
 
 # Tables persisted as outputs (everything else is an intermediate view)
-OUTPUTS = ["watchlist", "watchlist_edges", "evaluation", "signal_precision", "pattern_coverage"]
+OUTPUTS = ["watchlist", "watchlist_edges", "evaluation", "evaluation_time", "signal_precision", "pattern_coverage"]
 
 DEFAULT_PARAMS = {
     "window_days": 3,              # laundering hops must follow each other within 3 days
@@ -313,3 +339,16 @@ DEFAULT_PARAMS = {
 def render(sql, params):
     offsets = " UNION ALL ".join(f"SELECT {i} AS o" for i in range(int(params["window_days"]) + 1))
     return sql.format(offsets_sql=offsets, **params)
+
+
+# Built by the engine from ALL transactions (not just the learning days) before the steps run.
+# {train_until} / {test_until} are 'YYYY-MM-DD'; with no --train-until the engine creates it empty.
+FUTURE_TRUTH_SQL = """
+SELECT acct,
+       MAX(CASE WHEN txn_date < '{test_until}' THEN is_laundering ELSE 0 END) AS is_bad_official,
+       MAX(is_laundering) AS is_bad_all
+FROM (SELECT src_id AS acct, txn_date, is_laundering FROM transactions_all WHERE txn_date >= '{train_until}'
+      UNION ALL
+      SELECT dst_id AS acct, txn_date, is_laundering FROM transactions_all WHERE txn_date >= '{train_until}') u
+GROUP BY acct
+"""

@@ -16,7 +16,7 @@ import pandas as pd
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.join(ROOT, "emr"))
-from network_sql import DEFAULT_PARAMS, OUTPUTS, STEPS, render  # noqa: E402
+from network_sql import DEFAULT_PARAMS, FUTURE_TRUTH_SQL, OUTPUTS, STEPS, render  # noqa: E402
 
 Q1_FILES = ["q1_segment_risk", "q1_format_currency", "q1_time_profile", "q1_bank_corridors"]
 
@@ -36,6 +36,7 @@ def main():
     ap.add_argument("--out", default="data/analytics")
     ap.add_argument("--variant", default="SYN-Small")
     ap.add_argument("--train-until", default="", help="YYYY-MM-DD; learn only from earlier days")
+    ap.add_argument("--test-until", default="", help="YYYY-MM-DD; official grading = train_until <= day < this")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -47,9 +48,16 @@ def main():
         p = os.path.join(a.curated, f"{name}.csv")
         if os.path.exists(p):
             df = pd.read_csv(p)
-            if name == "transactions" and a.train_until:
-                df = df[df.txn_date < a.train_until]
+            if name == "transactions":
+                df.to_sql("transactions_all", con, index=False)   # all days: source of future labels
+                if a.train_until:
+                    df = df[df.txn_date < a.train_until]
             df.to_sql(name, con, index=False)
+    if a.train_until:
+        con.execute("CREATE TEMP TABLE future_truth AS " + FUTURE_TRUTH_SQL.format(
+            train_until=a.train_until, test_until=a.test_until or "9999-12-31"))
+    else:
+        con.execute("CREATE TEMP TABLE future_truth (acct TEXT, is_bad_official INT, is_bad_all INT)")
     con.execute("CREATE INDEX ix_t ON transactions(src_id)")
 
     t0 = time.time()
