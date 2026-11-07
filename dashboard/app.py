@@ -10,6 +10,7 @@ pulls back small, aggregated results - the heavy lifting stays in Athena / EMR.
 import glob
 import json
 import os
+import sys
 import time
 
 import networkx as nx
@@ -18,6 +19,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from architecture import architecture_svg  # noqa: E402  (theme-aware pipeline diagram)
 
 MODE = os.environ.get("DATA_MODE", "local")
 BUCKET = os.environ.get("BUCKET", "")
@@ -187,7 +191,7 @@ def hbar(labels, values, fmt, x_title: str, height: int = None, x_max: float = N
 SIGNAL_NAMES = {"sg_end": "Scatter-gather: start or end of the split", "sg_mule": "Scatter-gather: mule in the middle",
                 "cycle": "Money cycle (2-4 hops back to sender)", "fan_out": "Fan-out (pays many in one day)",
                 "gather_scatter": "Gather-scatter (collects and pays many, same day)",
-                "fan_in": "Fan-in (paid by many in one day)", "segment": "Uses high-risk channels (Q1)"}
+                "fan_in": "Fan-in (paid by many in one day)", "segment": "Uses high-risk channels (BQ1)"}
 
 
 def money(x) -> str:
@@ -223,7 +227,7 @@ def flag_tags(r, limit: int = 3) -> str:
         tags.append("busy hub")
     if "high-risk channels" in why:
         tags.append("risky channels")
-    return ", ".join(tags[:limit]) + (" +" if len(tags) > limit else "")
+    return ", ".join(tags[:limit]) + (f" +{len(tags) - limit} more" if len(tags) > limit else "")
 
 
 def precision_chart(df: pd.DataFrame, series, title: str, ytitle: str) -> go.Figure:
@@ -287,18 +291,18 @@ st.sidebar.markdown(f"**Data source:** `{MODE}`" + (f", `s3://{BUCKET}`" if MODE
 if MODE == "local":
     st.sidebar.warning("Local mode shows SYNTHETIC test data - not real findings.")
 st.sidebar.caption("Tip: every chart and table has a full-screen button in its top-right corner.")
-st.sidebar.markdown("---\n**Pipeline:** S3 → Glue ETL → Glue Catalog → Athena (Q1) → EMR Spark (Q2) → "
+st.sidebar.markdown("---\n**Pipeline:** S3 → Glue ETL → Glue Catalog → Athena (BQ1) → EMR Spark (BQ2) → "
                     "Kafka live monitor → this dashboard. Orchestrated by Step Functions.")
 
 dq = load("dq_report", variant)
 tab_overview, tab_q1, tab_q2, tab_live, tab_ops = st.tabs(
-    ["Overview", "Q1: Risk hotspots", "Q2: Laundering networks", "Live monitor", "Pipeline & cost"])
+    ["Overview", "BQ1: Risk hotspots", "BQ2: Laundering networks", "Live monitor", "Pipeline & cost"])
 
 # ----------------------------------------------------------------------------------------------- overview
 with tab_overview:
     st.header("Where is the dirty money, and who is moving it?")
-    st.write("Two questions, one pipeline: **Q1** tells the monitoring team *which channels* to watch; "
-             "**Q2** tells investigators *which accounts* form laundering networks, and why.")
+    st.write("Two questions, one pipeline: **BQ1** tells the monitoring team *which channels* to watch; "
+             "**BQ2** tells investigators *which accounts* form laundering networks, and why.")
     if not dq.empty:
         r = dq.iloc[0]
         c = st.columns(4)
@@ -310,7 +314,7 @@ with tab_overview:
     ev = load("q2_evaluation", variant)
     evt = load("q2_evaluation_time", variant)
     seg = load("q1_segment_risk", variant)
-    # Headline Q2 figure = the OFFICIAL time-based grade (docs/decisions.md); same-days only as a fallback
+    # Headline BQ2 figure = the OFFICIAL time-based grade (docs/decisions.md); same-days only as a fallback
     official = (evt[evt.period == "official"].sort_values("k")
                 if not evt.empty and (evt.n_holdout_bad > 0).any() else pd.DataFrame())
     if not seg.empty and (not official.empty or not ev.empty):
@@ -319,10 +323,10 @@ with tab_overview:
         cap = seg.sort_values("risk_rank")
         cap5 = cap[cap.cum_txn_share <= 0.05].cum_laundering_share.max()
         c = st.columns(3)
-        c[0].metric("Q1: laundering caught by reviewing the riskiest 5%", pct(cap5 if pd.notna(cap5) else 0),
+        c[0].metric("BQ1: laundering caught by reviewing the riskiest 5%", pct(cap5 if pd.notna(cap5) else 0),
                     help="Channel risk is learned on the learning days and measured on those same days.")
         if not official.empty:
-            c[1].metric("Q2: top-100 watchlist precision (official)",
+            c[1].metric("BQ2: top-100 watchlist precision (official)",
                         pct(k100.precision_combined),
                         f"{k100.precision_combined / max(k100.base_rate, 1e-9):.0f}x better than random",
                         delta_color="normal",
@@ -332,22 +336,15 @@ with tab_overview:
                         f"{int(k100.n_holdout_bad):,} of {int(k100.n_holdout_accounts):,}",
                         f"{pct(k100.base_rate)} = picking at random", delta_color="off")
         else:
-            c[1].metric("Precision of top-100 watchlist (Q2, same days, unseen accounts)", pct(k100.precision_combined),
+            c[1].metric("Precision of top-100 watchlist (BQ2, same days, unseen accounts)", pct(k100.precision_combined),
                         f"{k100.precision_combined / max(k100.base_rate, 1e-9):.0f}x better than random", delta_color="normal")
             c[2].metric("Laundering accounts in holdout set", f"{int(k100.n_holdout_bad):,} of {int(k100.n_holdout_accounts):,}")
 
-    arch = os.path.join(ROOT, "docs", "architecture.png")
-    if os.path.exists(arch):
-        st.subheader("How the pipeline works")
-        st.image(arch, caption="Batch layer: S3, Glue, Athena (Q1) and EMR (Q2), run in one click by Step Functions. "
-                               "Speed layer: Kafka applies the batch results to each new transfer. Both feed this "
-                               "dashboard.")
-
-# ----------------------------------------------------------------------------------------------- Q1
+# ----------------------------------------------------------------------------------------------- BQ1
 with tab_q1:
-    st.header("Q1: Where should the monitoring team spend its limited review capacity?")
+    st.header("BQ1: Where should the monitoring team spend its limited review capacity?")
     if seg.empty:
-        st.info("Run the pipeline to populate Q1 results.")
+        st.info("Run the pipeline to populate BQ1 results.")
     else:
         seg = seg.sort_values("risk_rank")
         st.subheader("Alert-budget optimiser")
@@ -433,17 +430,17 @@ with tab_q1:
                                "rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
                                "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
 
-# ----------------------------------------------------------------------------------------------- Q2
+# ----------------------------------------------------------------------------------------------- BQ2
 with tab_q2:
-    st.header("Q2: Which accounts form laundering networks, and why?")
+    st.header("BQ2: Which accounts form laundering networks, and why?")
     wl = load("q2_watchlist", variant)
     if wl.empty:
-        st.info("Run the pipeline to populate Q2 results.")
+        st.info("Run the pipeline to populate BQ2 results.")
     else:
         wl = wl.sort_values("risk_rank")
-        series = [("precision_combined", "Combined scorecard (Q1 + Q2)"),
+        series = [("precision_combined", "Combined scorecard (BQ1 + BQ2)"),
                   ("precision_network_only", "Network motifs only"),
-                  ("precision_segment_only", "Channel rules only (Q1)"),
+                  ("precision_segment_only", "Channel rules only (BQ1)"),
                   ("base_rate", "Random selection")]
         # OFFICIAL figure first (docs/decisions.md): accounts are scored from the learning days only and graded on
         # whether they launder on the LATER days; the tail days (almost all laundering) are shown separately.
@@ -719,11 +716,14 @@ with tab_q2:
             flags["hit rate"] = (flags.precision_calibration * 100).round(1)
             c1.dataframe(flags[["red flag", "woe", "n_cal", "n_cal_bad", "hit rate"]].round(3),
                          hide_index=True, width="stretch",
-                         column_config={"woe": st.column_config.NumberColumn("points (WoE)", format="%.2f"),
-                                        "n_cal": st.column_config.NumberColumn("flagged", format="%d"),
-                                        "n_cal_bad": st.column_config.NumberColumn("launderers", format="%d"),
+                         column_config={"red flag": st.column_config.TextColumn("red flag", width="medium"),
+                                        "woe": st.column_config.NumberColumn("points", format="%.2f", width="small",
+                                                                             help="Weight of evidence."),
+                                        "n_cal": st.column_config.NumberColumn("flagged", format="%d", width="small"),
+                                        "n_cal_bad": st.column_config.NumberColumn("launderers", format="%d",
+                                                                                   width="small"),
                                         "hit rate": st.column_config.NumberColumn(
-                                            "hit rate", format="%.1f%%",
+                                            "hit rate", format="%.1f%%", width="small",
                                             help="Share of the flagged accounts that were launderers.")})
             c1.caption("Learned on the learning half of the accounts, learning days only. More points = stronger "
                        "evidence; an account's score adds up the points of every flag it shows.")
@@ -740,8 +740,8 @@ with tab_q2:
 # ----------------------------------------------------------------------------------------------- live
 with tab_live:
     st.header("Live monitor: batch insights applied to every new transaction")
-    st.caption("Kafka topic `aml-transactions` (3 partitions, keyed by sender) → consumer applies the Q2 watchlist, "
-               "Q1 hot segments and a 24-hour velocity window → alerts land here within milliseconds.")
+    st.caption("Kafka topic `aml-transactions` (3 partitions, keyed by sender) → consumer applies the BQ2 watchlist, "
+               "BQ1 hot segments and a 24-hour velocity window → alerts land here within milliseconds.")
     if st.button("Refresh"):
         s3_alerts.clear()
         st.rerun()
@@ -780,14 +780,19 @@ with tab_live:
 # ----------------------------------------------------------------------------------------------- ops
 with tab_ops:
     st.header("Pipeline & cost evidence")
+    st.subheader("How the pipeline works")
+    st.image(architecture_svg(ui_mode()), width="stretch")
+    st.caption("Solid red: the batch trail, run daily in one click by Step Functions. Dashed: the live trail, where "
+               "Kafka applies the batch results to each new transfer. Icons: AWS Architecture Icons, Simple Icons.")
+    st.subheader("Why each service")
     st.markdown("""
 | Stage | AWS service | Why this choice (lecture reference) |
 |---|---|---|
 | Ingestion | EC2 + Kaggle API → **S3 raw zone** | data lake, schema-on-read (W4 slides 30-33) |
 | Preparation | **Glue ETL** (Spark) → Parquet, partitioned by date | columnar + partitioned = less data scanned (W2 slides 70-73) |
 | Catalog | **Glue crawler + Data Catalog** | metadata for Athena (W4 Glue lab) |
-| Q1 analytics | **Athena** (serverless SQL, UNLOAD to Parquet) | pay per byte scanned (W5 slide 36) |
-| Q2 analytics | **EMR** transient Spark cluster | in-memory multi-hop joins (W6 slides 28, 33) |
+| BQ1 analytics | **Athena** (serverless SQL, UNLOAD to Parquet) | pay per byte scanned (W5 slide 36) |
+| BQ2 analytics | **EMR** transient Spark cluster | in-memory multi-hop joins (W6 slides 28, 33) |
 | Orchestration | **Step Functions** | ordered, retried, auto-terminating (W4 slide 38) |
 | Speed layer | **Kafka** on EC2 | event backbone, partitions + consumer groups (W7) |
 | Serving | **Streamlit** + boto3 → Athena | small aggregated results only (W5 slide 37) |
