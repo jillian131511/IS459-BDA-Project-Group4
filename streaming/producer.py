@@ -36,6 +36,9 @@ def main():
     ap.add_argument("--topic", default="aml-transactions")
     ap.add_argument("--start", default="", help="skip rows before this timestamp prefix, e.g. 2022/09/09")
     ap.add_argument("--end", default="", help="skip rows from this timestamp prefix on, e.g. 2022/09/11")
+    ap.add_argument("--max-ahead-mins", type=float, default=60,
+                    help="skip rows more than this far ahead of the stream's clock: a few later-dated rows (mostly "
+                         "laundering) sit early in the raw file and would make the replay unrepresentative")
     ap.add_argument("--max-wait", type=float, default=0.5,
                     help="longest pause between two events (s); the raw file is only roughly in time order")
     ap.add_argument("--max-events", type=int, default=100000)
@@ -47,12 +50,17 @@ def main():
                              value_serializer=lambda v: json.dumps(v).encode())
     reader = csv.reader(open_source(a.source))
     next(reader)  # header
-    sent, first_event_ts, t0 = 0, None, time.time()
+    sent, skipped_ahead, first_event_ts, t0 = 0, 0, None, time.time()
+    clock = time.mktime(time.strptime(a.start, "%Y/%m/%d")) if a.start else None
     for row in reader:
         if len(row) < 11 or row[0] < a.start or (a.end and row[0] >= a.end):
             continue
         ev = dict(zip(COLS, row))
         event_ts = time.mktime(time.strptime(ev["ts_raw"], "%Y/%m/%d %H:%M"))
+        if clock is not None and event_ts > clock + a.max_ahead_mins * 60:
+            skipped_ahead += 1
+            continue
+        clock = event_ts if clock is None else max(clock, event_ts)
         if first_event_ts is None:
             first_event_ts = event_ts
         # pace the replay: wait until this event's (scaled) time has come
@@ -68,7 +76,7 @@ def main():
         if sent >= a.max_events:
             break
     producer.flush()
-    print(f"done: {sent:,} events in {time.time() - t0:.0f}s")
+    print(f"done: {sent:,} events in {time.time() - t0:.0f}s ({skipped_ahead:,} out-of-order rows skipped)")
 
 
 if __name__ == "__main__":

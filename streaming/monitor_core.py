@@ -31,7 +31,7 @@ def amount_band(usd):
 
 class RiskModel:
     def __init__(self, watchlist_csv_text, segments_csv_text, min_probability=0.5, min_segment_lift=20.0,
-                 watchlist_segment_lift=2.0, velocity_k=8, velocity_window_secs=24 * 3600):
+                 watchlist_segment_lift=2.0, velocity_k=8, velocity_window_secs=24 * 3600, hubs=()):
         self.watch = {}
         for r in csv.DictReader(io.StringIO(watchlist_csv_text)):
             p = float(r["risk_probability"])
@@ -47,6 +47,9 @@ class RiskModel:
                 self.hot[key] = float(r["lift"])
         self.watchlist_segment_lift = watchlist_segment_lift
         self.velocity_k, self.window = velocity_k, velocity_window_secs
+        # hub accounts (merchants, payroll: more counterparties than the batch layer's hub_degree) are left out of
+        # the velocity rule, exactly as the batch layer leaves them out of its fan-out flags
+        self.hubs = set(hubs)
         self.recent = defaultdict(deque)  # sender -> deque[(ts_epoch, receiver)]
 
     def score(self, t):
@@ -64,11 +67,13 @@ class RiskModel:
         if key in self.hot:
             reasons.append(f"high-risk segment {key[0]}/{key[1]}/{key[4]} (lift {self.hot[key]:.0f}x)")
             severity = max(severity, min(0.9, self.hot[key] / 100))
-        dq = self.recent[t["src_id"]]
-        dq.append((t["ts_epoch"], t["dst_id"]))
-        while dq and dq[0][0] < t["ts_epoch"] - self.window:
-            dq.popleft()
-        distinct = len({d for _, d in dq})
+        distinct = 0
+        if t["src_id"] not in self.hubs:
+            dq = self.recent[t["src_id"]]
+            dq.append((t["ts_epoch"], t["dst_id"]))
+            while dq and dq[0][0] < t["ts_epoch"] - self.window:
+                dq.popleft()
+            distinct = len({d for _, d in dq})
         if distinct >= self.velocity_k:
             reasons.append(f"velocity: paid {distinct} distinct accounts in 24h (fan-out in progress)")
             severity = max(severity, 0.6)

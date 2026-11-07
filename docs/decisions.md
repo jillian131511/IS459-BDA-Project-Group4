@@ -2,7 +2,32 @@
 
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 
-## 2026-11-04 · Speed layer works; the velocity rule is too noisy (open item)
+## 2026-11-04 · Velocity rule fixed: hubs excluded, threshold 11 (chosen on a learning day)
+
+**Change.** The live velocity rule now skips the batch layer's hub accounts (more than `hub_degree` counterparties
+on the learning days; 190 accounts in HI-Small, published by the Q2 job to `analytics/serving/.../hubs/`), and its
+threshold is 11 distinct payees in 24 h instead of 8.
+**How it was chosen.** On a replay of **7 Sep** (a learning day) with hubs excluded, the threshold where the
+velocity rule itself scores best (F1) was 11 — also the batch layer's own data-driven fan-out threshold.
+**Measured once on 8 Sep** (grading day; 482,773 transfers, 539 laundering = 0.112 %), whole day, same scoring code
+as the Kafka consumer (`streaming/monitor_core.py`):
+
+| Live rules | Alerts | Share of transfers | Precision | vs random | Laundering transfers caught |
+|---|---|---|---|---|---|
+| Before: k = 8, hubs included | 71,834 | 14.9 % | 0.38 % | 3x | 273 of 539 (51 %) |
+| **After: hubs excluded, k = 11** | **8,491** | **1.8 %** | **2.26 %** | **20x** | 192 of 539 (36 %) |
+
+8.5x fewer alerts, each 6x more likely to be real, at the cost of catching 36 % instead of 51 % of laundering
+transfers. The velocity rule itself adds little on top of the channel and watchlist rules (3,652 alerts, 13 real);
+it is kept for the schemes those rules cannot see yet.
+
+Live replay through Kafka after the fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer now skips
+rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
+inflate the alert precision on the Live tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
+the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. The whole-day figure above
+(2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
+
+## 2026-11-04 · Speed layer works; the velocity rule is too noisy (fixed above)
 
 Kafka (KRaft, 3 partitions) and the dashboard run on one t3.large (`infra/launch_serving_ec2.sh`). Replay of
 HI-Small from the first grading day (8 Sep), 100,000 transfers in 285 s (about 350 a second), median delay from
