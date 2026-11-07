@@ -19,7 +19,7 @@ class _St(types.ModuleType):
         if n == "selectbox": return lambda label, options, **k: list(options)[0]
         if n == "slider": return lambda label, lo, hi, val, *a, **k: val
         if n == "text_input": return lambda label, val="", **k: "cycle"
-        if n == "toggle": return lambda label, value=False: True
+        if n == "toggle": return lambda label, value=False, **k: True
         if n == "button": return lambda *a, **k: False
         return _Any()
 
