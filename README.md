@@ -9,7 +9,7 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | **Q1** | Where should the AML monitoring team spend its limited review capacity? | Transaction-monitoring analysts, Head of AML Compliance | Segment risk (lift + Wilson lower bound), capture curve, **alert-budget optimiser**, heatmaps, bank corridors |
 | **Q2** | Which accounts are moving the money, and why do we think so? | Financial-crime investigators | Graph motifs (fan-in/out, 2–4-hop cycles, scatter-gather, gather-scatter), **explainable weight-of-evidence scorecard**, top-1,000 watchlist with reasons, money-trail explorer |
 
-![architecture](docs/architecture.png)
+![architecture](docs/architecture_light.png)
 
 ## Repository map
 
