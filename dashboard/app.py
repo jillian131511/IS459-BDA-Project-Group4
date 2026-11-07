@@ -317,22 +317,29 @@ with tab_overview:
         cap = seg.sort_values("risk_rank")
         cap5 = cap[cap.cum_txn_share <= 0.05].cum_laundering_share.max()
         c = st.columns(3)
-        c[0].metric("Laundering caught by reviewing the riskiest 5% of transactions (Q1)", pct(cap5 if pd.notna(cap5) else 0),
+        c[0].metric("Q1: laundering caught by reviewing the riskiest 5%", pct(cap5 if pd.notna(cap5) else 0),
                     help="Channel risk is learned on the learning days and measured on those same days.")
         if not official.empty:
-            c[1].metric("Top-100 watchlist: share that launders on the later days (Q2, official)",
+            c[1].metric("Q2: top-100 watchlist precision (official)",
                         pct(k100.precision_combined),
                         f"{k100.precision_combined / max(k100.base_rate, 1e-9):.0f}x better than random",
                         delta_color="normal",
                         help="Flagged using only the learning days, graded on the following days, on the half of the "
                              "accounts whose labels were never used to build the scorecard.")
-            c[2].metric("Graded accounts that launder on the later days",
+            c[2].metric("Graded accounts that launder later",
                         f"{int(k100.n_holdout_bad):,} of {int(k100.n_holdout_accounts):,}",
                         f"{pct(k100.base_rate)} = picking at random", delta_color="off")
         else:
             c[1].metric("Precision of top-100 watchlist (Q2, same days, unseen accounts)", pct(k100.precision_combined),
                         f"{k100.precision_combined / max(k100.base_rate, 1e-9):.0f}x better than random", delta_color="normal")
             c[2].metric("Laundering accounts in holdout set", f"{int(k100.n_holdout_bad):,} of {int(k100.n_holdout_accounts):,}")
+
+    arch = os.path.join(ROOT, "docs", "architecture.png")
+    if os.path.exists(arch):
+        st.subheader("How the pipeline works")
+        st.image(arch, caption="Batch layer: S3, Glue, Athena (Q1) and EMR (Q2), run in one click by Step Functions. "
+                               "Speed layer: Kafka applies the batch results to each new transfer. Both feed this "
+                               "dashboard.")
 
 # ----------------------------------------------------------------------------------------------- Q1
 with tab_q1:
@@ -379,7 +386,12 @@ with tab_q1:
         st.dataframe(rules[["risk_rank", "payment_format", "payment_currency", "corridor", "fx", "amount_band",
                             "n_txn", "n_laundering", "rate", "lift"]], hide_index=True, width="stretch",
                      column_config={"rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
-                                    "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
+                                    "lift": st.column_config.NumberColumn("lift", format="%.1fx"),
+                                    "risk_rank": st.column_config.NumberColumn("rank"),
+                                    "payment_format": "payment", "payment_currency": "currency",
+                                    "amount_band": "amount (USD)",
+                                    "n_txn": st.column_config.NumberColumn("transfers", format="%d"),
+                                    "n_laundering": st.column_config.NumberColumn("laundering", format="%d")})
 
         fc = load("q1_format_currency", variant)
         tp = load("q1_time_profile", variant)
@@ -388,20 +400,36 @@ with tab_q1:
             h = fc[fc.n_txn >= 30].pivot_table(index="payment_currency", columns="payment_format", values="lift")
             c1.subheader("Risk lift: payment format and currency")
             show(lift_heatmap(h, "payment format", label_from=10, height=460), c1)
-            c1.caption("Red is riskier than average, blue is safer; numbers mark the hotspots (10x or more). "
-                       "Combinations with fewer than 30 transfers are left blank.")
+            c1.caption("Red marks combinations riskier than average (lift above 1x); numbers mark the hotspots "
+                       "(10x or more). Combinations with fewer than 30 transfers are left blank.")
         if not tp.empty:
             t = tp.assign(day=tp.day_of_week.map(DOW)).pivot_table(index="day", columns="txn_hour", values="lift")
             t = t.reindex([d for d in DOW.values() if d in t.index])
             c2.subheader("When does laundering happen? (lift by hour)")
             show(lift_heatmap(t, "hour of day", height=460), c2)
-            c2.caption("Each cell compares that hour's laundering rate with the average; hover for the exact lift.")
+            wk = tp.day_of_week >= 6
+            rate = lambda m: tp[m].n_laundering.sum() / max(tp[m].n_txn.sum(), 1)
+            ratio = rate(wk) / max(rate(~wk), 1e-12)
+            hot = tp[tp.n_txn >= 30].sort_values("lift", ascending=False).head(3)
+            peaks = ", ".join(f"{DOW[int(r.day_of_week)]} {int(r.txn_hour):02d}:00 ({r.lift:.1f}x)"
+                              for r in hot.itertuples())
+            c2.caption(f"Weekend transfers are **{ratio:.1f}x** as likely to be laundering as weekday ones. "
+                       f"Riskiest hours: {peaks}. Hover a cell for its exact lift.")
         bc = load("q1_bank_corridors", variant)
         if not bc.empty:
             st.subheader("Bank-to-bank corridors carrying the most laundered value")
             top = bc.sort_values("laundered_usd", ascending=False).head(15)
-            st.dataframe(top.assign(laundered_usd=top.laundered_usd.round(0), lift=top.lift.round(1)),
-                         hide_index=True, width="stretch")
+            st.dataframe(top.assign(rate=top.laundering_rate * 100)[
+                ["from_bank", "to_bank", "n_txn", "n_laundering", "usd_volume", "laundered_usd", "rate", "lift"]],
+                hide_index=True, width="stretch",
+                column_config={"from_bank": st.column_config.TextColumn("from bank"),
+                               "to_bank": st.column_config.TextColumn("to bank"),
+                               "n_txn": st.column_config.NumberColumn("transfers", format="%d"),
+                               "n_laundering": st.column_config.NumberColumn("laundering", format="%d"),
+                               "usd_volume": st.column_config.NumberColumn("total value (USD)", format="compact"),
+                               "laundered_usd": st.column_config.NumberColumn("laundered (USD)", format="compact"),
+                               "rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
+                               "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
 
 # ----------------------------------------------------------------------------------------------- Q2
 with tab_q2:
@@ -499,9 +527,15 @@ with tab_q2:
             for r in sub.itertuples():
                 g.add_edge(r.src_id, r.dst_id, usd=r.usd, n=r.n_txn, bad=r.any_laundering)
             g.add_node(acct)
-            pos = nx.spring_layout(g, seed=7, k=0.9)
             risk = dict(zip(wl.acct, wl.risk_probability))
             rank = dict(zip(wl.acct, wl.risk_rank))
+            # rings, not a force layout: a force layout pulls a laundering ring into a dense knot where labels
+            # collide. Here every flagged counterparty gets its own slot on the inner ring.
+            inner = sorted((n for n in g.nodes if n in risk and n != acct), key=lambda n: rank[n])
+            outer = sorted((n for n in g.nodes if n not in risk),
+                           key=lambda n: -sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)))
+            shells = [[acct]] + [sh for sh in (inner, outer) if sh]
+            pos = nx.shell_layout(g, nlist=shells) if len(shells) > 1 else {acct: (0.0, 0.0)}
             rows = {r.acct: r for r in wl.itertuples()}
             me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
             nodes = list(g.nodes)
@@ -540,13 +574,12 @@ with tab_q2:
                 pts = [pos[n] for n in group] or [pos[acct]]
                 return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
 
-            ring_c = centre([n for n in flagged if n != acct]) if len(flagged) > 3 else pos[acct]
             all_c = centre([n for n in nodes if n != acct])
             SIDES = ["middle right", "top right", "top center", "top left",
                      "middle left", "bottom left", "bottom center", "bottom right"]
 
             def side(n):
-                cx, cy = all_c if n == acct else ring_c if n in risk else pos[acct]
+                cx, cy = all_c if n == acct else pos[acct]          # rings: every label points outwards
                 dx, dy = pos[n][0] - cx, pos[n][1] - cy
                 if abs(dx) < 1e-9 and abs(dy) < 1e-9:
                     return "top center"
@@ -605,7 +638,7 @@ with tab_q2:
             padx, pady = (max(xs) - min(xs)) * 0.18 + 0.05, (max(ys) - min(ys)) * 0.10 + 0.05
             fig.update_layout(annotations=arrows)
             fig.update_xaxes(visible=False, range=[min(xs) - padx, max(xs) + padx])
-            fig.update_yaxes(visible=False, range=[min(ys) - pady, max(ys) + pady])
+            fig.update_yaxes(visible=False, range=[min(ys) - pady, max(ys) + pady], scaleanchor="x", scaleratio=1)
             fig = style(fig, height=600)
             fig.update_layout(margin=dict(l=40, r=40, t=50, b=30))
 
@@ -661,12 +694,15 @@ with tab_q2:
             flags = sp[sp.value > 0].sort_values("woe", ascending=False).copy()
             flags["red flag"] = [SIGNAL_NAMES.get(s, s) + (f" (level {int(v)})" if s == "segment" else "")
                                  for s, v in zip(flags.signal, flags.value)]
-            flags["launderers among flagged"] = (flags.precision_calibration * 100).round(1).astype(str) + "%"
-            c1.dataframe(flags[["red flag", "woe", "n_cal", "n_cal_bad", "launderers among flagged"]].round(3),
+            flags["hit rate"] = (flags.precision_calibration * 100).round(1)
+            c1.dataframe(flags[["red flag", "woe", "n_cal", "n_cal_bad", "hit rate"]].round(3),
                          hide_index=True, width="stretch",
                          column_config={"woe": st.column_config.NumberColumn("points (WoE)", format="%.2f"),
-                                        "n_cal": st.column_config.NumberColumn("accounts flagged"),
-                                        "n_cal_bad": st.column_config.NumberColumn("of which launderers")})
+                                        "n_cal": st.column_config.NumberColumn("flagged", format="%d"),
+                                        "n_cal_bad": st.column_config.NumberColumn("launderers", format="%d"),
+                                        "hit rate": st.column_config.NumberColumn(
+                                            "hit rate", format="%.1f%%",
+                                            help="Share of the flagged accounts that were launderers.")})
             c1.caption("Learned on the learning half of the accounts, learning days only. More points = stronger "
                        "evidence; an account's score adds up the points of every flag it shows.")
         if not pc.empty:
@@ -708,7 +744,13 @@ with tab_live:
         c1, c2 = st.columns([2, 1])
         c1.dataframe(a.sort_values("alerted_at", ascending=False).head(200)[
             ["ts", "src_id", "dst_id", "amount_usd", "payment_format", "severity", "reasons"]],
-            hide_index=True, width="stretch", height=400)
+            hide_index=True, width="stretch", height=400,
+            column_config={"ts": "time", "src_id": "from account", "dst_id": "to account",
+                           "amount_usd": st.column_config.NumberColumn("amount (USD)", format="%.0f"),
+                           "payment_format": "payment",
+                           "severity": st.column_config.ProgressColumn("severity", format="%.2f",
+                                                                       min_value=0, max_value=1),
+                           "reasons": "why it alerted"})
         counts = a.rule.fillna("other").str.capitalize().value_counts()
         c2.markdown("**Alerts by rule**")
         show(hbar(counts.index, counts.values, lambda v: f"{int(v):,}", "alerts", height=400), c2)
@@ -742,7 +784,22 @@ with tab_ops:
                 bench["test"] = bench.label.str.split(":").str[1]
                 summ = bench.groupby(["variant", "test"])[["data_scanned_mb", "engine_seconds", "cost_usd"]].median().reset_index()
                 st.subheader("CSV vs. partitioned Parquet - same question, measured (median of 3 runs)")
-                st.dataframe(summ, hide_index=True, width="stretch")
+                pairs = []
+                for (v, t), r in summ.set_index(["variant", "test"]).iterrows():
+                    if t.endswith("csv") and (v, t[:-3] + "parquet") in summ.set_index(["variant", "test"]).index:
+                        pq = summ.set_index(["variant", "test"]).loc[(v, t[:-3] + "parquet")]
+                        pairs.append((v, t[:-4].replace("_", " "), r.data_scanned_mb / max(pq.data_scanned_mb, 1e-9)))
+                if pairs:
+                    cols_ = st.columns(len(pairs))
+                    for col, (v, t, x) in zip(cols_, pairs):
+                        col.metric(f"{v}, {t}: Parquet scans", f"{x:,.0f}x less data",
+                                   help="Same question asked of the raw CSV and of the partitioned Parquet; "
+                                        "Athena bills by data scanned.")
+                st.dataframe(summ, hide_index=True, width="stretch",
+                             column_config={"data_scanned_mb": st.column_config.NumberColumn("MB scanned",
+                                                                                             format="%.1f"),
+                                            "engine_seconds": st.column_config.NumberColumn("seconds", format="%.2f"),
+                                            "cost_usd": st.column_config.NumberColumn("cost (USD)", format="%.5f")})
                 vcol = {v: c for v, c in zip(sorted(summ.variant.unique()), [T["s1"], T["s2"], T["s3"]])}
                 fig = go.Figure([go.Bar(x=d.test, y=d.data_scanned_mb, name=v, marker=dict(color=vcol.get(v, T["s1"])),
                                         text=[f"{x:,.1f} MB" for x in d.data_scanned_mb], textposition="outside",
@@ -756,6 +813,10 @@ with tab_ops:
                 fig.update_layout(margin=dict(t=90), legend=dict(y=1.0))
                 show(fig)
             st.subheader("All Athena queries run by the pipeline")
-            st.dataframe(df.sort_values("at", ascending=False), hide_index=True, width="stretch")
+            st.dataframe(df.sort_values("at", ascending=False), hide_index=True, width="stretch",
+                         column_config={"data_scanned_mb": st.column_config.NumberColumn("MB scanned", format="%.1f"),
+                                        "engine_seconds": st.column_config.NumberColumn("seconds", format="%.2f"),
+                                        "cost_usd": st.column_config.NumberColumn("cost (USD)", format="%.5f"),
+                                        "at": "run at"})
     else:
         st.info("Cost/performance logs appear here in athena mode (s3://BUCKET/analytics/run_log/).")
