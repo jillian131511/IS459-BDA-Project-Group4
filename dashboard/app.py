@@ -153,8 +153,10 @@ def lift_heatmap(h: pd.DataFrame, x_title: str, label_from: float = None, height
     vals = h.astype(float)
     z = np.log10(vals.clip(lower=1.0))                      # <= 1x (average) maps to 0 = neutral
     top = float(np.nanmax(z.values)) if np.isfinite(z.values).any() else 1.0
-    top = max(1.0, min(top, 3.0))
-    ticks = [t for t in (0, 1, 2, 3) if t <= top]
+    top = max(np.log10(2), min(top, 3.0))                   # scale follows the data (hourly lifts are ~2-3x)
+    ticks = [float(np.log10(v)) for v in (1, 1.5, 2, 3, 5, 10, 20, 50, 100, 1000) if np.log10(v) <= top + 1e-9]
+    if len(ticks) > 5:                                      # keep the colourbar uncluttered on wide ranges
+        ticks = [t for t in ticks if abs(t - round(t)) < 1e-9]
     cellmap = vals.map if hasattr(vals, "map") else vals.applymap  # pandas < 2.1 has only applymap
     text = cellmap(lambda v: f"{v:.0f}x" if label_from is not None and pd.notna(v) and v >= label_from else "")
     fig = go.Figure(go.Heatmap(
@@ -534,8 +536,28 @@ with tab_q2:
             inner = sorted((n for n in g.nodes if n in risk and n != acct), key=lambda n: rank[n])
             outer = sorted((n for n in g.nodes if n not in risk),
                            key=lambda n: -sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)))
-            shells = [[acct]] + [sh for sh in (inner, outer) if sh]
-            pos = nx.shell_layout(g, nlist=shells) if len(shells) > 1 else {acct: (0.0, 0.0)}
+            pos = {acct: (0.0, 0.0)}
+
+            def ring(members, radius, start):
+                for i, n in enumerate(members):
+                    a = start + 2 * np.pi * i / len(members)
+                    pos[n] = (radius * np.cos(a), radius * np.sin(a))
+
+            ring(inner, 0.6 if outer else 0.8, np.pi / 2)
+            if inner and outer:
+                # outer accounts go in the gaps between inner accounts, with a clear margin around each inner
+                # account's direction, so arrows to the outer ring never run through an inner label
+                step = 2 * np.pi / len(inner)
+                margin = min(np.radians(14), step / 4)
+                gaps = [outer[gi::len(inner)] for gi in range(len(inner))]   # deal round-robin: big flows spread out
+                for gi, members in enumerate(gaps):
+                    lo = np.pi / 2 + gi * step + margin
+                    hi = np.pi / 2 + (gi + 1) * step - margin
+                    for j, n in enumerate(members):
+                        a = lo + (j + 1) * (hi - lo) / (len(members) + 1)
+                        pos[n] = (np.cos(a), np.sin(a))
+            else:
+                ring(outer, 1.0, np.pi / 2)
             rows = {r.acct: r for r in wl.itertuples()}
             me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
             nodes = list(g.nodes)
@@ -638,7 +660,7 @@ with tab_q2:
             padx, pady = (max(xs) - min(xs)) * 0.18 + 0.05, (max(ys) - min(ys)) * 0.10 + 0.05
             fig.update_layout(annotations=arrows)
             fig.update_xaxes(visible=False, range=[min(xs) - padx, max(xs) + padx])
-            fig.update_yaxes(visible=False, range=[min(ys) - pady, max(ys) + pady], scaleanchor="x", scaleratio=1)
+            fig.update_yaxes(visible=False, range=[min(ys) - pady, max(ys) + pady])
             fig = style(fig, height=600)
             fig.update_layout(margin=dict(l=40, r=40, t=50, b=30))
 
