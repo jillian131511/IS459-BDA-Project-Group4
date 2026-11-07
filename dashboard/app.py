@@ -223,7 +223,7 @@ def flag_tags(r, limit: int = 3) -> str:
         tags.append("busy hub")
     if "high-risk channels" in why:
         tags.append("risky channels")
-    return ", ".join(tags[:limit]) + (" +" if len(tags) > limit else "")
+    return ", ".join(tags[:limit]) + (f" +{len(tags) - limit} more" if len(tags) > limit else "")
 
 
 def precision_chart(df: pd.DataFrame, series, title: str, ytitle: str) -> go.Figure:
@@ -719,11 +719,14 @@ with tab_q2:
             flags["hit rate"] = (flags.precision_calibration * 100).round(1)
             c1.dataframe(flags[["red flag", "woe", "n_cal", "n_cal_bad", "hit rate"]].round(3),
                          hide_index=True, width="stretch",
-                         column_config={"woe": st.column_config.NumberColumn("points (WoE)", format="%.2f"),
-                                        "n_cal": st.column_config.NumberColumn("flagged", format="%d"),
-                                        "n_cal_bad": st.column_config.NumberColumn("launderers", format="%d"),
+                         column_config={"red flag": st.column_config.TextColumn("red flag", width="medium"),
+                                        "woe": st.column_config.NumberColumn("points", format="%.2f", width="small",
+                                                                             help="Weight of evidence."),
+                                        "n_cal": st.column_config.NumberColumn("flagged", format="%d", width="small"),
+                                        "n_cal_bad": st.column_config.NumberColumn("launderers", format="%d",
+                                                                                   width="small"),
                                         "hit rate": st.column_config.NumberColumn(
-                                            "hit rate", format="%.1f%%",
+                                            "hit rate", format="%.1f%%", width="small",
                                             help="Share of the flagged accounts that were launderers.")})
             c1.caption("Learned on the learning half of the accounts, learning days only. More points = stronger "
                        "evidence; an account's score adds up the points of every flag it shows.")
