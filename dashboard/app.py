@@ -13,6 +13,7 @@ import os
 import time
 
 import networkx as nx
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -96,6 +97,91 @@ def pct(x, d=1):
     return f"{100 * float(x):.{d}f}%"
 
 
+# ----------------------------------------------------------------------------------------------- chart style
+# One style for every chart. Series colours are the first three slots of a validated categorical palette
+# (blue, orange, aqua: colour-blind safe as a set, checked against this page's dark and light surfaces).
+# Text always uses neutral ink, never a series colour; grids are hairlines; bars are thin with rounded ends.
+def ui_mode() -> str:
+    t = getattr(getattr(st.context, "theme", None), "type", None)
+    return t if t in ("light", "dark") else "dark"
+
+
+TOKENS = {
+    "dark": dict(surface="#0e1117", ink="#f0efec", ink2="#c3c2b7", muted="#898781", grid="#2c2c2a",
+                 axis="#383835", hover="#1a1a19", s1="#3987e5", s2="#d95926", s3="#199e70", bad="#d03b3b",
+                 cell_text="#0b0b0b", unflagged="#6f6e69",
+                 heat=[[0, "#262730"], [0.35, "#5a2d2d"], [0.7, "#b23a36"], [1, "#ff6b6b"]],
+                 risk=[[0, "#7a2e2e"], [1, "#ff6b6b"]]),
+    "light": dict(surface="#ffffff", ink="#0b0b0b", ink2="#52514e", muted="#898781", grid="#e1e0d9",
+                  axis="#c3c2b7", hover="#ffffff", s1="#2a78d6", s2="#eb6834", s3="#1baf7a", bad="#d03b3b",
+                  cell_text="#ffffff", unflagged="#c3c2b7",
+                  heat=[[0, "#f0efec"], [0.35, "#f2b8b5"], [0.7, "#e05a55"], [1, "#a32424"]],
+                  risk=[[0, "#f2a7a7"], [1, "#b52a2a"]]),
+}
+T = TOKENS[ui_mode()]
+FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+
+
+def rgba(hex_colour: str, alpha: float) -> str:
+    h = hex_colour.lstrip("#")
+    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
+
+
+def style(fig, height: int = 420, grid: bool = True, legend: bool = True):
+    """Apply the shared look: transparent surface, neutral ink, hairline grid, legend on top, roomy hover."""
+    fig.update_layout(
+        height=height, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT, size=13, color=T["ink2"]), title_font=dict(size=15, color=T["ink"]),
+        margin=dict(l=8, r=8, t=56 if legend else 24, b=8), showlegend=legend, barcornerradius=4,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, title=None, font=dict(size=13, color=T["ink2"])),
+        hoverlabel=dict(bgcolor=T["hover"], bordercolor=T["axis"], font=dict(family=FONT, size=13, color=T["ink"])))
+    fig.update_xaxes(showgrid=False, zeroline=False, linecolor=T["axis"], tickcolor=T["axis"], automargin=True,
+                     tickfont=dict(color=T["ink2"]), title_font=dict(color=T["muted"], size=12))
+    fig.update_yaxes(showgrid=grid, gridcolor=T["grid"], gridwidth=1, zeroline=False, linecolor=T["axis"],
+                     automargin=True,
+                     tickfont=dict(color=T["ink2"]), title_font=dict(color=T["muted"], size=12))
+    return fig
+
+
+def show(fig, where=None):
+    (where or st).plotly_chart(fig, width="stretch", theme=None)
+
+
+def lift_heatmap(h: pd.DataFrame, x_title: str, label_from: float = None, height: int = 420):
+    """Lift on a log scale, one-sided: average or below stays neutral, red builds up to the hotspots.
+    The chart's job is to show where risk concentrates, so 'safer than average' is not given a colour."""
+    vals = h.astype(float)
+    z = np.log10(vals.clip(lower=1.0))                      # <= 1x (average) maps to 0 = neutral
+    top = float(np.nanmax(z.values)) if np.isfinite(z.values).any() else 1.0
+    top = max(1.0, min(top, 3.0))
+    ticks = [t for t in (0, 1, 2, 3) if t <= top]
+    cellmap = vals.map if hasattr(vals, "map") else vals.applymap  # pandas < 2.1 has only applymap
+    text = cellmap(lambda v: f"{v:.0f}x" if label_from is not None and pd.notna(v) and v >= label_from else "")
+    fig = go.Figure(go.Heatmap(
+        z=z.values, x=[str(c) for c in vals.columns], y=list(vals.index), customdata=vals.values,
+        colorscale=T["heat"], zmin=0, zmax=top, xgap=2, ygap=2,
+        text=text.values, texttemplate="%{text}", textfont=dict(size=12, color="#ffffff"),
+        hovertemplate="%{y}, %{x}<br>lift %{customdata:.1f}x<extra></extra>",
+        colorbar=dict(title=dict(text="lift", font=dict(color=T["muted"], size=12)), tickvals=ticks,
+                      ticktext=["1x (avg)" if t == 0 else f"{10 ** t:g}x" for t in ticks],
+                      tickfont=dict(color=T["ink2"]), outlinewidth=0, thickness=12)))
+    fig.update_xaxes(title=x_title, type="category")
+    fig.update_yaxes(type="category", autorange="reversed")
+    return style(fig, height=height, grid=False, legend=False)
+
+
+def hbar(labels, values, fmt, x_title: str, height: int = None, x_max: float = None):
+    """Single-series horizontal bars, largest on top, value at the tip (one colour: identity is the axis label)."""
+    d = pd.DataFrame({"l": list(labels), "v": list(values)}).sort_values("v")
+    fig = go.Figure(go.Bar(y=d.l, x=d.v, orientation="h", marker=dict(color=T["s1"]), width=0.55,
+                           text=[fmt(v) for v in d.v], textposition="outside", cliponaxis=False,
+                           textfont=dict(color=T["ink"], size=13), hovertemplate="%{y}: %{text}<extra></extra>"))
+    fig.update_xaxes(title=x_title, showgrid=True, gridcolor=T["grid"],
+                     range=[0, x_max if x_max is not None else float(d.v.max()) * 1.25 or 1])
+    fig.update_yaxes(showgrid=False)
+    return style(fig, height=height or 60 + 38 * len(d), legend=False)
+
+
 SIGNAL_NAMES = {"sg_end": "Scatter-gather: start or end of the split", "sg_mule": "Scatter-gather: mule in the middle",
                 "cycle": "Money cycle (2-4 hops back to sender)", "fan_out": "Fan-out (pays many in one day)",
                 "gather_scatter": "Gather-scatter (collects and pays many, same day)",
@@ -107,7 +193,12 @@ def money(x) -> str:
     return f"${x / 1e6:,.1f}M" if x >= 1e6 else f"${x / 1e3:,.0f}K" if x >= 1e3 else f"${x:,.0f}"
 
 
-def flag_tags(r) -> str:
+def money_md(x) -> str:
+    """money() for Streamlit markdown, where two '$' signs would otherwise start a maths formula."""
+    return money(x).replace("$", r"\$")
+
+
+def flag_tags(r, limit: int = 3) -> str:
     """Short version of an account's red flags, e.g. '28 cycles, splits funds, mule'."""
     why = str(getattr(r, "reasons", "") or "")
     tags = []
@@ -130,7 +221,36 @@ def flag_tags(r) -> str:
         tags.append("busy hub")
     if "high-risk channels" in why:
         tags.append("risky channels")
-    return ", ".join(tags[:3]) + (" +" if len(tags) > 3 else "")
+    return ", ".join(tags[:limit]) + (" +" if len(tags) > limit else "")
+
+
+def precision_chart(df: pd.DataFrame, series, title: str, ytitle: str) -> go.Figure:
+    """Precision per watchlist size. k is a category ('Top 100'), so the groups are evenly spaced. Only the
+    headline series carries value labels; random selection is a reference line, not a fourth bar."""
+    df = df.sort_values("k")
+    cats = [f"Top {int(k):,}" for k in df.k]
+    colours = [T["s1"], T["s2"], T["s3"]]
+    fig = go.Figure()
+    for i, (col, name) in enumerate(c for c in series if c[0] != "base_rate"):
+        vals = df[col] * 100
+        lab = [f"{v:.1f}".rstrip("0").rstrip(".") + "%" for v in vals]
+        fig.add_trace(go.Bar(x=cats, y=vals, name=name, marker=dict(color=colours[i]), customdata=lab,
+                             text=lab if i == 0 else None, textposition="outside", cliponaxis=False,
+                             textfont=dict(size=14, color=T["ink"]),
+                             hovertemplate=f"{name}<br>%{{x}}: %{{customdata}}<extra></extra>"))
+    top = float(max((df[c] * 100).max() for c, _ in series))
+    fig.update_layout(barmode="group", bargap=0.35, bargroupgap=0.12,
+                      title=dict(text=title, x=0, xanchor="left", y=0.98, yanchor="top"))
+    if "base_rate" in df:
+        base = float(df.base_rate.iloc[0]) * 100
+        fig.add_hline(y=base, line=dict(color=T["muted"], width=1.5))
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", line=dict(color=T["muted"], width=1.5),
+                                 name=f"Random selection ({base:.1f}%)", hoverinfo="skip"))
+    fig.update_xaxes(type="category", title=None, tickfont=dict(size=13, color=T["ink"]))
+    fig.update_yaxes(title=ytitle, range=[0, top * 1.18 + 1], ticksuffix="%")
+    fig = style(fig, height=460)
+    fig.update_layout(margin=dict(t=96), legend=dict(y=1.0, yanchor="bottom"))
+    return fig
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -233,37 +353,49 @@ with tab_q1:
         curve = pd.concat([pd.DataFrame({"cum_txn_share": [0.0], "cum_laundering_share": [0.0]}),
                            seg[["cum_txn_share", "cum_laundering_share"]]])
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=curve.cum_txn_share * 100, y=curve.cum_laundering_share * 100,
-                                 mode="lines", name="Risk-ranked monitoring", line=dict(width=3)))
         fig.add_trace(go.Scatter(x=[0, 100], y=[0, 100], mode="lines", name="Random review",
-                                 line=dict(dash="dash", color="grey")))
-        fig.add_vline(x=budget * 100, line_dash="dot", annotation_text=f"budget {budget * 100:.1f}%")
-        fig.update_layout(xaxis_title="% of transactions reviewed", yaxis_title="% of laundering caught",
-                          height=380, margin=dict(t=20), xaxis_range=[0, 30])
-        st.plotly_chart(fig, width="stretch")
+                                 line=dict(color=T["muted"], width=1.5), hoverinfo="skip"))
+        fig.add_trace(go.Scatter(x=curve.cum_txn_share * 100, y=curve.cum_laundering_share * 100, mode="lines",
+                                 name="Risk-ranked review", line=dict(color=T["s1"], width=2.5),
+                                 fill="tozeroy", fillcolor=rgba(T["s1"], 0.10),
+                                 hovertemplate="Review %{x:.1f}% of transfers<br>catch %{y:.1f}% of laundering"
+                                               "<extra></extra>"))
+        fig.add_vline(x=budget * 100, line=dict(color=T["muted"], width=1))
+        used = float(chosen.cum_txn_share.max()) if not chosen.empty else 0.0
+        fig.add_trace(go.Scatter(x=[used * 100], y=[caught * 100], mode="markers+text", showlegend=False,
+                                 marker=dict(size=12, color=T["s1"], line=dict(width=2, color=T["surface"])),
+                                 text=[f"<b>{caught * 100:.0f}% caught</b> by reviewing {used * 100:.1f}%"],
+                                 textposition="middle right", textfont=dict(size=14, color=T["ink"]),
+                                 hoverinfo="skip"))
+        fig.update_xaxes(title="share of transfers reviewed", range=[0, 30], ticksuffix="%")
+        fig.update_yaxes(title="share of laundering caught", range=[0, 102], ticksuffix="%")
+        show(style(fig, height=400))
         st.markdown("**Monitoring rules to deploy at this budget** (ranked by the 95% Wilson lower bound of the "
                     "laundering rate, so small lucky segments cannot top the list):")
-        show = chosen.head(25).assign(
+        rules = chosen.head(25).assign(
             corridor=lambda d: d.is_cross_bank.map({1: "cross-bank", 0: "same bank"}),
             fx=lambda d: d.is_cross_currency.map({1: "cross-currency", 0: "same currency"}),
             rate=lambda d: (d.laundering_rate * 100).round(2), lift=lambda d: d.lift.round(1))
-        st.dataframe(show[["risk_rank", "payment_format", "payment_currency", "corridor", "fx", "amount_band",
-                           "n_txn", "n_laundering", "rate", "lift"]], hide_index=True, width="stretch")
+        st.dataframe(rules[["risk_rank", "payment_format", "payment_currency", "corridor", "fx", "amount_band",
+                            "n_txn", "n_laundering", "rate", "lift"]], hide_index=True, width="stretch",
+                     column_config={"rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
+                                    "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
 
         fc = load("q1_format_currency", variant)
         tp = load("q1_time_profile", variant)
         c1, c2 = st.columns(2)
         if not fc.empty:
             h = fc[fc.n_txn >= 30].pivot_table(index="payment_currency", columns="payment_format", values="lift")
-            c1.subheader("Risk lift: payment format × currency")
-            c1.plotly_chart(px.imshow(h.round(1), text_auto=True, aspect="auto", color_continuous_scale="Reds",
-                                      labels=dict(color="lift")), width="stretch")
+            c1.subheader("Risk lift: payment format and currency")
+            show(lift_heatmap(h, "payment format", label_from=10, height=460), c1)
+            c1.caption("Red is riskier than average, blue is safer; numbers mark the hotspots (10x or more). "
+                       "Combinations with fewer than 30 transfers are left blank.")
         if not tp.empty:
             t = tp.assign(day=tp.day_of_week.map(DOW)).pivot_table(index="day", columns="txn_hour", values="lift")
             t = t.reindex([d for d in DOW.values() if d in t.index])
             c2.subheader("When does laundering happen? (lift by hour)")
-            c2.plotly_chart(px.imshow(t.round(1), aspect="auto", color_continuous_scale="Reds",
-                                      labels=dict(color="lift", x="hour")), width="stretch")
+            show(lift_heatmap(t, "hour of day", height=460), c2)
+            c2.caption("Each cell compares that hour's laundering rate with the average; hover for the exact lift.")
         bc = load("q1_bank_corridors", variant)
         if not bc.empty:
             st.subheader("Bank-to-bank corridors carrying the most laundered value")
@@ -288,153 +420,229 @@ with tab_q2:
         if not official.empty:
             off = official
             tail = evt[evt.period == "incl_tail"].set_index("k")
-            fig2 = go.Figure()
-            for col, name in series:
-                fig2.add_trace(go.Bar(x=off.k.astype(str), y=off[col] * 100, name=name,
-                                      text=(off[col] * 100).round(1).astype(str) + "%", textposition="outside"))
-            fig2.update_layout(barmode="group", height=360, margin=dict(t=40),
-                               title="OFFICIAL: flagged from the learning days, graded on the following days "
-                                     "(graded half of the accounts only)",
-                               xaxis_title="watchlist size k", yaxis_title="% laundering on the later days")
-            st.plotly_chart(fig2, width="stretch")
+            show(precision_chart(off, series, "<b>Official grade</b>: flagged from the learning days, graded on the "
+                                              "following days (graded half of the accounts only)",
+                                 "launder on the later days"))
             if 1000 in tail.index and (off.k == 1000).any():
                 o1k = off.set_index("k").loc[1000]
                 st.caption(f"Top 1,000: {pct(o1k.precision_combined)} on the grading days vs {pct(o1k.base_rate, 2)} "
                            f"at random. Including the tail days (almost all laundering): "
-                           f"{pct(tail.loc[1000, 'precision_combined'])} — we report the first figure.")
+                           f"{pct(tail.loc[1000, 'precision_combined'])}; we report the first figure.")
+            with st.expander("Show the numbers"):
+                st.dataframe(off.assign(**{n: (off[c] * 100).round(1) for c, n in series})[
+                    ["k"] + [n for _, n in series]].rename(columns={"k": "watchlist size"}),
+                    hide_index=True, width="stretch")
         if not ev.empty:
             e = ev.sort_values("k")
             with st.expander("Supporting test: same days (schemes already under way)", expanded=official.empty):
-                fig = go.Figure()
-                for col, name in series:
-                    fig.add_trace(go.Bar(x=e.k.astype(str), y=e[col] * 100, name=name))
-                fig.update_layout(barmode="group", height=330, margin=dict(t=30),
-                                  title="Same days: precision of top-k watchlist on the graded half (labels never used)",
-                                  xaxis_title="watchlist size k", yaxis_title="% truly involved in laundering")
-                st.plotly_chart(fig, width="stretch")
+                show(precision_chart(e, series, "<b>Same days</b>: precision of the top-k watchlist on the graded "
+                                                "half (labels never used)", "truly involved in laundering"))
                 st.caption("Spotting schemes that are already running is easier than predicting who launders next, "
                            "so this figure is higher than the official one above.")
         HALF = {"holdout": "graded (labels never used)", "calibration": "learning (labels set the points)"}
         has_split = "split" in wl.columns
-        c1, c2 = st.columns([3, 2])
-        with c1:
-            st.subheader("Investigator watchlist")
+        st.subheader("Investigator watchlist")
+        f1, f2 = st.columns([3, 2])
+        with f1:
             q = st.text_input("Filter by account id or reason (e.g. 'cycle', 'mule')", "")
-            view = wl[wl.acct.str.contains(q, case=False, regex=False)
-                      | wl.reasons.fillna("").str.contains(q, case=False, regex=False)] if q else wl
-            if has_split and st.toggle("Only the graded half (accounts whose labels were never used)", value=False):
-                view = view[view["split"] == "holdout"]
-            cols = ["risk_rank", "acct", "risk"] + (["half"] if has_split else []) + ["reasons"]
-            st.dataframe(view.head(300).assign(risk=lambda d: (d.risk_probability * 100).round(1),
-                                               half=lambda d: d["split"].map(HALF) if has_split else "")[cols],
-                         hide_index=True, width="stretch", height=420,
-                         column_config={"risk": st.column_config.NumberColumn("risk score", format="%.1f"),
-                                        "half": st.column_config.TextColumn("account half")})
-            st.caption(f"{len(view):,} of {len(wl):,} watchlist accounts match. Scores use only each account's own "
-                       "money-flow patterns; the points per red flag were learned from the labels of the learning "
-                       "half, on the learning days.")
-        with c2:
-            st.subheader("Money-trail explorer")
-            # money trails are published for the top 300 accounts; the picker follows the watchlist filter
-            options = view[view.risk_rank <= 300].acct.tolist() or wl.acct.head(300).tolist()
+        view = wl[wl.acct.str.contains(q, case=False, regex=False)
+                  | wl.reasons.fillna("").str.contains(q, case=False, regex=False)] if q else wl
+        with f2:
+            st.write("")
+            graded_only = has_split and st.toggle("Only the graded half (accounts whose labels were never used)",
+                                                  value=False)
+        if graded_only:
+            view = view[view["split"] == "holdout"]
+        cols = ["risk_rank", "acct", "risk"] + (["half"] if has_split else []) + ["reasons"]
+        st.dataframe(view.head(300).assign(risk=lambda d: (d.risk_probability * 100).round(1),
+                                           half=lambda d: d["split"].map(HALF) if has_split else "")[cols],
+                     hide_index=True, width="stretch", height=320,
+                     column_config={"risk_rank": st.column_config.NumberColumn("rank"),
+                                    "acct": st.column_config.TextColumn("account"),
+                                    "risk": st.column_config.ProgressColumn("risk score", format="%.1f",
+                                                                            min_value=0, max_value=100),
+                                    "half": st.column_config.TextColumn("account half")})
+        st.caption(f"{len(view):,} of {len(wl):,} watchlist accounts match. Scores use only each account's own "
+                   "money-flow patterns; the points per red flag were learned from the labels of the learning "
+                   "half, on the learning days.")
+
+        st.subheader("Money-trail explorer")
+        # money trails are published for the top 300 accounts; the picker follows the watchlist filter
+        options = view[view.risk_rank <= 300].acct.tolist() or wl.acct.head(300).tolist()
+        k1, k2, k3 = st.columns([2, 2, 2])
+        with k1:
             acct = st.selectbox("Account", options)
-            edges = load("q2_watchlist_edges", variant)
-            if not edges.empty and acct:
-                sub = edges[(edges.src_id == acct) | (edges.dst_id == acct)]
-                nbrs = set(sub.src_id) | set(sub.dst_id)
-                sub = edges[edges.src_id.isin(nbrs) & edges.dst_id.isin(nbrs)]
-                g = nx.DiGraph()
-                for r in sub.itertuples():
-                    g.add_edge(r.src_id, r.dst_id, usd=r.usd, n=r.n_txn, bad=r.any_laundering)
-                pos = nx.spring_layout(g, seed=7, k=0.9)
-                show_truth = st.toggle("Reveal IBM's answer key (laundering transfers in red)", value=False,
-                                       help="The labels are only used to check the watchlist afterwards; "
-                                            "they are not used to draw the graph or to score this account.")
-                labels_on = st.segmented_control(
-                    "Labels on the graph", ["Off", "Flagged accounts", "All accounts"], default="Flagged accounts",
-                    help="Writes a one-line remark next to each dot. 'All accounts' is easiest to read full screen.")
-                risk = dict(zip(wl.acct, wl.risk_probability))
-                rank = dict(zip(wl.acct, wl.risk_rank))
-                tags = {r.acct: flag_tags(r) for r in wl.itertuples()}
-                me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
+        with k2:
+            labels_on = st.segmented_control(
+                "Labels on the graph", ["Off", "Flagged accounts", "All accounts"], default="Flagged accounts",
+                help="Writes a short remark next to each dot. 'All accounts' is easiest to read full screen.")
+        with k3:
+            st.write("")
+            show_truth = st.toggle("Reveal IBM's answer key", value=False,
+                                   help="Laundering transfers turn red. The labels are only used to check the "
+                                        "watchlist afterwards; they are not used to draw the graph or to score "
+                                        "any account.")
+        edges = load("q2_watchlist_edges", variant)
+        if not edges.empty and acct:
+            sub = edges[(edges.src_id == acct) | (edges.dst_id == acct)]
+            nbrs = set(sub.src_id) | set(sub.dst_id)
+            sub = edges[edges.src_id.isin(nbrs) & edges.dst_id.isin(nbrs)]
+            g = nx.DiGraph()
+            for r in sub.itertuples():
+                g.add_edge(r.src_id, r.dst_id, usd=r.usd, n=r.n_txn, bad=r.any_laundering)
+            g.add_node(acct)
+            pos = nx.spring_layout(g, seed=7, k=0.9)
+            risk = dict(zip(wl.acct, wl.risk_probability))
+            rank = dict(zip(wl.acct, wl.risk_rank))
+            rows = {r.acct: r for r in wl.itertuples()}
+            me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
+            nodes = list(g.nodes)
+            flagged = [n for n in nodes if n in risk]
+            unflagged = [n for n in nodes if n not in risk]
 
-                def flows(n):
-                    """Money between the selected account and n, from n's point of view."""
-                    got = g.edges[acct, n] if g.has_edge(acct, n) else None
-                    paid = g.edges[n, acct] if g.has_edge(n, acct) else None
-                    parts = ([f"received {money(got['usd'])} from {me}"] if got else []) + \
-                            ([f"paid {money(paid['usd'])} to {me}"] if paid else [])
-                    return ", ".join(parts)
+            def flows(n, short=False):
+                """Money between the selected account and n, from n's point of view."""
+                got = g.edges[acct, n] if g.has_edge(acct, n) else None
+                paid = g.edges[n, acct] if g.has_edge(n, acct) else None
+                parts = ([f"received {money(got['usd'])}" + ("" if short else f" from {me}")] if got else []) + \
+                        ([f"paid {money(paid['usd'])}" + ("" if short else f" to {me}")] if paid else [])
+                return ", ".join(parts)
 
-                # arrows: one annotation per transfer pair, pointing from payer to payee
-                arrows, mx, my, mtext = [], [], [], []
-                for u, v, d in g.edges(data=True):
-                    red = bool(show_truth and d["bad"])
-                    arrows.append(dict(x=pos[v][0], y=pos[v][1], ax=pos[u][0], ay=pos[u][1],
-                                       xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
-                                       arrowhead=2, arrowsize=1.2 if red else 1, arrowwidth=2.5 if red else 1,
-                                       arrowcolor="crimson" if red else "#999",
-                                       standoff=12 if v == acct else 7, startstandoff=12 if u == acct else 7))
-                    mx.append((pos[u][0] + pos[v][0]) / 2)
-                    my.append((pos[u][1] + pos[v][1]) / 2)
-                    mtext.append(f"{u} → {v}<br>{int(d['n']):,} transfer(s), ${d['usd']:,.0f}"
-                                 + ("<br><b>laundering (answer key)</b>" if red else ""))
+            # arrows: payer -> payee, coloured by direction relative to the selected account;
+            # transfers between its counterparties stay faint so the selected account's flows stand out
+            IN_C, OUT_C, OTHER_C, BAD_C = T["s1"], T["s2"], rgba(T["muted"], 0.30), T["bad"]
+            arrows, mx, my, mtext = [], [], [], []
+            for u, v, d in g.edges(data=True):
+                red = bool(show_truth and d["bad"])
+                mine = acct in (u, v)
+                colour = BAD_C if red else IN_C if v == acct else OUT_C if u == acct else OTHER_C
+                arrows.append(dict(x=pos[v][0], y=pos[v][1], ax=pos[u][0], ay=pos[u][1],
+                                   xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
+                                   arrowhead=2, arrowsize=1.1 if (red or mine) else 0.7,
+                                   arrowwidth=2.5 if red else 1.6 if mine else 0.8, arrowcolor=colour,
+                                   standoff=14 if v == acct else 7, startstandoff=14 if u == acct else 7))
+                mx.append((pos[u][0] + pos[v][0]) / 2)
+                my.append((pos[u][1] + pos[v][1]) / 2)
+                mtext.append(f"{u} → {v}<br>{int(d['n']):,} transfer(s), {money(d['usd'])}"
+                             + ("<br><b>laundering (answer key)</b>" if red else ""))
 
-                def hover(n):
-                    if n in risk:
-                        extra = "" if n == acct else f"<br>{flows(n)}"
-                        return (f"<b>{n}</b><br>watchlist #{int(rank[n]):,}, risk {risk[n]:.2f}"
-                                f"<br>{tags[n] or 'channel risk only'}{extra}")
-                    return f"<b>{n}</b><br>not on watchlist<br>{flows(n)}"
+            # smart label placement: each label points away from the centre of its own group,
+            # so labels fan outwards instead of piling up inside the cluster
+            def centre(group):
+                pts = [pos[n] for n in group] or [pos[acct]]
+                return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
 
-                def short(n):
-                    """One-line remark written next to a dot (kept short so the graph stays readable)."""
-                    if labels_on not in ("Flagged accounts", "All accounts"):
-                        return ""
-                    if n == acct:
-                        return f"<b>{me} (selected)</b>"
-                    if n in risk:
-                        return f"#{int(rank[n]):,}: {tags[n] or 'channel risk'}"
-                    return f"Not flagged: {flows(n)}" if labels_on == "All accounts" else ""
+            ring_c = centre([n for n in flagged if n != acct]) if len(flagged) > 3 else pos[acct]
+            all_c = centre([n for n in nodes if n != acct])
+            SIDES = ["middle right", "top right", "top center", "top left",
+                     "middle left", "bottom left", "bottom center", "bottom right"]
 
-                nodes = list(g.nodes)
-                fig = go.Figure([
-                    go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=9, color="rgba(0,0,0,0)"),
-                               text=mtext, hoverinfo="text", name="transfer"),
-                    go.Scatter(x=[pos[n][0] for n in nodes], y=[pos[n][1] for n in nodes], mode="markers+text",
-                               marker=dict(size=[22 if n == acct else 11 for n in nodes],
-                                           color=[risk.get(n, 0) for n in nodes], colorscale="Reds", cmin=0, cmax=1,
-                                           line=dict(width=1, color="#333"), colorbar=dict(title="risk")),
-                               text=[short(n) for n in nodes], textposition="top center", textfont=dict(size=11),
-                               hovertext=[hover(n) for n in nodes], hoverinfo="text", name="account")])
-                fig.update_layout(height=460, showlegend=False, margin=dict(l=0, r=0, t=10, b=0), annotations=arrows,
-                                  xaxis=dict(visible=False), yaxis=dict(visible=False))
-                st.plotly_chart(fig, width="stretch")
-                st.caption("Arrows point from payer to payee: transfers on the learning days, with the account's 40 "
-                           "largest counterparties by USD. White dots are accounts we did not flag. Hover a dot or the "
-                           "middle of an arrow for details; use the full-screen button for the clearest view.")
+            def side(n):
+                cx, cy = all_c if n == acct else ring_c if n in risk else pos[acct]
+                dx, dy = pos[n][0] - cx, pos[n][1] - cy
+                if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+                    return "top center"
+                return SIDES[int(((np.degrees(np.arctan2(dy, dx)) + 22.5) % 360) // 45)]
 
-                # investigator summary: who belongs in one case, and where money left the flagged group
-                ring = [n for n in nodes if n in risk]
+            def label(n):
+                if labels_on not in ("Flagged accounts", "All accounts"):
+                    return ""
+                if n == acct:
+                    return ""                                # drawn as a chip (annotation) instead
+                if n in risk:
+                    return f"<b>#{int(rank[n]):,}</b><br>{flag_tags(rows[n], limit=2) or 'channel risk'}"
+                return flows(n, short=True) if labels_on == "All accounts" else ""
+
+            def hover(n):
+                if n in risk:
+                    extra = "" if n == acct else f"<br>{flows(n)}"
+                    return (f"<b>{n}</b><br>watchlist #{int(rank[n]):,}, risk {risk[n]:.2f}"
+                            f"<br>{flag_tags(rows[n], limit=9) or 'channel risk only'}{extra}")
+                return f"<b>{n}</b><br>not on the watchlist<br>{flows(n)}"
+
+            key = [(IN_C, f"Money into {me}"), (OUT_C, f"Money out of {me}"),
+                   (rgba(T["muted"], 0.6), "Between its counterparties")] + \
+                  ([(BAD_C, "Laundering (answer key)")] if show_truth else [])
+            fig = go.Figure(
+                [go.Scatter(x=[None], y=[None], mode="lines", line=dict(color=c, width=3), name=n,
+                            hoverinfo="skip") for c, n in key]
+                + [go.Scatter(x=[None], y=[None], mode="markers", name="Not flagged", hoverinfo="skip",
+                              marker=dict(size=10, color=T["unflagged"]))]
+                + [go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=14, color="rgba(0,0,0,0)"),
+                              text=mtext, hoverinfo="text", showlegend=False)]
+                + [go.Scatter(x=[pos[n][0] for n in unflagged], y=[pos[n][1] for n in unflagged],
+                              mode="markers+text", showlegend=False,
+                              marker=dict(size=10, color=T["unflagged"], line=dict(width=2, color=T["surface"])),
+                              text=[label(n) for n in unflagged], textposition=[side(n) for n in unflagged],
+                              textfont=dict(size=11, color=T["ink2"]),
+                              hovertext=[hover(n) for n in unflagged], hoverinfo="text")]
+                + [go.Scatter(x=[pos[n][0] for n in flagged], y=[pos[n][1] for n in flagged],
+                              mode="markers+text", showlegend=False,
+                              marker=dict(size=[26 if n == acct else 13 for n in flagged],
+                                          color=[risk[n] for n in flagged], colorscale=T["risk"], cmin=0, cmax=1,
+                                          line=dict(width=[2.5 if n == acct else 2 for n in flagged],
+                                                    color=[T["ink"] if n == acct else T["surface"] for n in flagged]),
+                                          colorbar=dict(title=dict(text="risk score",
+                                                                   font=dict(color=T["muted"], size=12)),
+                                                        tickfont=dict(color=T["ink2"]), outlinewidth=0,
+                                                        thickness=10, len=0.6, y=0.4)),
+                              text=[label(n) for n in flagged], textposition=[side(n) for n in flagged],
+                              textfont=dict(size=12, color=T["ink"]),
+                              hovertext=[hover(n) for n in flagged], hoverinfo="text")])
+            if labels_on in ("Flagged accounts", "All accounts"):
+                arrows.append(dict(x=pos[acct][0], y=pos[acct][1], xref="x", yref="y", showarrow=False, yshift=26,
+                                   text=f"<b>{me}</b> selected", font=dict(size=13, color=T["ink"]),
+                                   bgcolor=rgba(T["surface"], 0.9), bordercolor=T["axis"], borderpad=4))
+            xs, ys = [p[0] for p in pos.values()], [p[1] for p in pos.values()]
+            padx, pady = (max(xs) - min(xs)) * 0.18 + 0.05, (max(ys) - min(ys)) * 0.10 + 0.05
+            fig.update_layout(annotations=arrows)
+            fig.update_xaxes(visible=False, range=[min(xs) - padx, max(xs) + padx])
+            fig.update_yaxes(visible=False, range=[min(ys) - pady, max(ys) + pady])
+            fig = style(fig, height=600)
+            fig.update_layout(margin=dict(l=40, r=40, t=50, b=30))
+
+            gcol, pcol = st.columns([3, 2])
+            show(fig, gcol)
+            gcol.caption("Arrows point from payer to payee: transfers on the learning days, with the account's 40 "
+                         "largest counterparties by USD. Hover a dot or the middle of an arrow for details; use the "
+                         "full-screen button for the clearest view.")
+
+            # investigator panel: who belongs in one case, and where money left the flagged group
+            with pcol:
                 inside = [d for u, v, d in g.edges(data=True) if u in risk and v in risk]
                 exits = sorted(((d["usd"], v) for u, v, d in g.edges(data=True) if u in risk and v not in risk),
                                reverse=True)
-                if len(ring) > 1:
-                    others = sorted(int(rank[n]) for n in ring if n != acct)
+                if len(flagged) > 1:
+                    others = sorted(int(rank[n]) for n in flagged if n != acct)
                     listed = ", ".join(f"#{r:,}" for r in others[:8]) + (" and more" if len(others) > 8 else "")
                     st.info(f"**Suggested case:** {me} with {len(others)} flagged counterpart"
                             f"{'y' if len(others) == 1 else 'ies'} ({listed}). Between them they moved "
-                            f"{money(sum(d['usd'] for d in inside))} in {sum(int(d['n']) for d in inside):,} transfers"
-                            + (f". Largest flow out to an unflagged account: {money(exits[0][0])} to {exits[0][1]}, "
-                               "worth checking as a possible cash-out point." if exits else "."))
+                            f"{money_md(sum(d['usd'] for d in inside))} in "
+                            f"{sum(int(d['n']) for d in inside):,} transfers"
+                            + (f". Largest flow out to an unflagged account: {money_md(exits[0][0])} to "
+                               f"`{exits[0][1]}`, worth checking as a possible cash-out point." if exits else "."))
                 row = wl[wl.acct == acct].iloc[0]
+                st.markdown(f"**Why {me} was flagged:** {row.reasons or 'channel risk only'}")
                 if has_split:
                     st.markdown("**Account half:** " + (
-                        "graded - its own labels were never used to build the scorecard."
+                        "graded. Its own labels were never used to build the scorecard."
                         if row["split"] == "holdout" else
-                        "learning - its labels helped set the points per red flag; its score still comes only "
+                        "learning. Its labels helped set the points per red flag; its score still comes only "
                         "from its own money-flow patterns."))
-                st.markdown(f"**Why flagged:** {row.reasons or 'channel risk only'}")
+                table = pd.DataFrame([{
+                    "account": n,
+                    "rank": int(rank[n]) if n in rank else None,
+                    "risk score": round(risk[n] * 100, 1) if n in risk else None,
+                    "red flags": (flag_tags(rows[n], limit=9) or "channel risk") if n in risk else "not flagged",
+                    f"money with {me}": "selected account" if n == acct else flows(n, short=True),
+                    "_usd": sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)),
+                } for n in nodes])
+                table = pd.concat([table[table.account == acct],
+                                   table[(table.account != acct) & table["rank"].notna()].sort_values("rank"),
+                                   table[table["rank"].isna()].sort_values("_usd", ascending=False)])
+                st.markdown(f"**Accounts in this money trail** ({len(nodes)})")
+                st.dataframe(table.drop(columns="_usd"), hide_index=True, width="stretch", height=300,
+                             column_config={"rank": st.column_config.NumberColumn("rank", format="#%d")})
         sp = load("q2_signal_precision", variant)
         pc = load("q2_pattern_coverage", variant)
         c1, c2 = st.columns(2)
@@ -453,11 +661,9 @@ with tab_q2:
                        "evidence; an account's score adds up the points of every flag it shows.")
         if not pc.empty:
             c2.subheader("Laundering typologies caught by the watchlist")
-            c2.plotly_chart(px.bar(pc.sort_values("detection_rate"), x="detection_rate", y="pattern_type",
-                                   orientation="h", range_x=[0, 1], text_auto=".0%", height=330,
-                                   labels={"detection_rate": "share of schemes touched by the top-1,000 watchlist",
-                                           "pattern_type": "scheme shape"}),
-                            width="stretch")
+            show(hbar(pc.pattern_type.str.replace("-", " ").str.title(), pc.detection_rate * 100,
+                      lambda v: f"{v:.0f}%", "schemes touched by the top-1,000 watchlist", x_max=112).update_xaxes(
+                tickvals=[0, 20, 40, 60, 80, 100], ticksuffix="%"), c2)
             c2.caption(f"{int(pc.n_detected.sum()):,} of {int(pc.n_attempts.sum()):,} known schemes "
                        f"({pct(pc.n_detected.sum() / max(pc.n_attempts.sum(), 1), 0)}) touch at least one watchlist "
                        "account, across every shape, including shapes we have no detector for (account reuse). "
@@ -493,7 +699,9 @@ with tab_live:
         c1.dataframe(a.sort_values("alerted_at", ascending=False).head(200)[
             ["ts", "src_id", "dst_id", "amount_usd", "payment_format", "severity", "reasons"]],
             hide_index=True, width="stretch", height=400)
-        c2.plotly_chart(px.histogram(a, y="rule", title="Alerts by rule", height=400), width="stretch")
+        counts = a.rule.fillna("other").str.capitalize().value_counts()
+        c2.markdown("**Alerts by rule**")
+        show(hbar(counts.index, counts.values, lambda v: f"{int(v):,}", "alerts", height=400), c2)
 
 # ----------------------------------------------------------------------------------------------- ops
 with tab_ops:
@@ -525,8 +733,18 @@ with tab_ops:
                 summ = bench.groupby(["variant", "test"])[["data_scanned_mb", "engine_seconds", "cost_usd"]].median().reset_index()
                 st.subheader("CSV vs. partitioned Parquet - same question, measured (median of 3 runs)")
                 st.dataframe(summ, hide_index=True, width="stretch")
-                st.plotly_chart(px.bar(summ, x="test", y="data_scanned_mb", color="variant", barmode="group",
-                                       log_y=True, title="MB scanned per query (log scale)"), width="stretch")
+                vcol = {v: c for v, c in zip(sorted(summ.variant.unique()), [T["s1"], T["s2"], T["s3"]])}
+                fig = go.Figure([go.Bar(x=d.test, y=d.data_scanned_mb, name=v, marker=dict(color=vcol.get(v, T["s1"])),
+                                        text=[f"{x:,.1f} MB" for x in d.data_scanned_mb], textposition="outside",
+                                        cliponaxis=False, textfont=dict(color=T["ink"], size=12),
+                                        hovertemplate=f"{v}, %{{x}}: %{{y:,.1f}} MB<extra></extra>")
+                                 for v, d in summ.groupby("variant")])
+                fig.update_layout(barmode="group", bargap=0.55, bargroupgap=0.15,
+                                  title=dict(text="Data scanned per query (log scale)", x=0, xanchor="left", y=0.97))
+                fig.update_yaxes(type="log", title="MB scanned", dtick=1, tickformat=",")
+                fig = style(fig, height=440)
+                fig.update_layout(margin=dict(t=90), legend=dict(y=1.0))
+                show(fig)
             st.subheader("All Athena queries run by the pipeline")
             st.dataframe(df.sort_values("at", ascending=False), hide_index=True, width="stretch")
     else:
