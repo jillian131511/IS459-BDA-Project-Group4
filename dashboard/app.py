@@ -132,7 +132,7 @@ def style(fig, height: int = 420, grid: bool = True, legend: bool = True):
     fig.update_layout(
         height=height, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family=FONT, size=13, color=T["ink2"]), title_font=dict(size=15, color=T["ink"]),
-        margin=dict(l=8, r=8, t=56 if legend else 24, b=8), showlegend=legend, barcornerradius=4,
+        margin=dict(l=8, r=8, t=56 if legend else 24, b=48), showlegend=legend, barcornerradius=4,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, title=None, font=dict(size=13, color=T["ink2"])),
         hoverlabel=dict(bgcolor=T["hover"], bordercolor=T["axis"], font=dict(family=FONT, size=13, color=T["ink"])))
     fig.update_xaxes(showgrid=False, zeroline=False, linecolor=T["axis"], tickcolor=T["axis"], automargin=True,
@@ -174,7 +174,7 @@ def hbar(labels, values, fmt, x_title: str, height: int = None, x_max: float = N
     """Single-series horizontal bars, largest on top, value at the tip (one colour: identity is the axis label)."""
     d = pd.DataFrame({"l": list(labels), "v": list(values)}).sort_values("v")
     fig = go.Figure(go.Bar(y=d.l, x=d.v, orientation="h", marker=dict(color=T["s1"]), width=0.55,
-                           text=[fmt(v) for v in d.v], textposition="outside", cliponaxis=False,
+                           text=[fmt(v) for v in d.v], textposition="outside", cliponaxis=False, constraintext="none",
                            textfont=dict(color=T["ink"], size=13), hovertemplate="%{y}: %{text}<extra></extra>"))
     fig.update_xaxes(title=x_title, showgrid=True, gridcolor=T["grid"],
                      range=[0, x_max if x_max is not None else float(d.v.max()) * 1.25 or 1])
@@ -235,7 +235,7 @@ def precision_chart(df: pd.DataFrame, series, title: str, ytitle: str) -> go.Fig
         vals = df[col] * 100
         lab = [f"{v:.1f}".rstrip("0").rstrip(".") + "%" for v in vals]
         fig.add_trace(go.Bar(x=cats, y=vals, name=name, marker=dict(color=colours[i]), customdata=lab,
-                             text=lab if i == 0 else None, textposition="outside", cliponaxis=False,
+                             text=lab if i == 0 else None, textposition="outside", cliponaxis=False, constraintext="none",
                              textfont=dict(size=14, color=T["ink"]),
                              hovertemplate=f"{name}<br>%{{x}}: %{{customdata}}<extra></extra>"))
     top = float(max((df[c] * 100).max() for c, _ in series))
@@ -249,7 +249,7 @@ def precision_chart(df: pd.DataFrame, series, title: str, ytitle: str) -> go.Fig
     fig.update_xaxes(type="category", title=None, tickfont=dict(size=13, color=T["ink"]))
     fig.update_yaxes(title=ytitle, range=[0, top * 1.18 + 1], ticksuffix="%")
     fig = style(fig, height=460)
-    fig.update_layout(margin=dict(t=96), legend=dict(y=1.0, yanchor="bottom"))
+    fig.update_layout(margin=dict(t=96, b=70), legend=dict(y=1.0, yanchor="bottom"))
     return fig
 
 
@@ -453,15 +453,23 @@ with tab_q2:
                                                   value=False)
         if graded_only:
             view = view[view["split"] == "holdout"]
-        cols = ["risk_rank", "acct", "risk"] + (["half"] if has_split else []) + ["reasons"]
-        st.dataframe(view.head(300).assign(risk=lambda d: (d.risk_probability * 100).round(1),
-                                           half=lambda d: d["split"].map(HALF) if has_split else "")[cols],
+        # table cells cannot wrap, so the table shows the short form of the red flags; the full sentences
+        # appear as bullet points for the selected account in the money-trail panel below
+        cols = ["risk_rank", "acct", "risk"] + (["half"] if has_split else []) + ["red_flags"]
+        shown = view.head(300)
+        st.dataframe(shown.assign(risk=(shown.risk_probability * 100).round(1),
+                                  half=shown["split"].map(HALF) if has_split else "",
+                                  red_flags=[flag_tags(r, limit=9) or "channel risk only" for r in shown.itertuples()]
+                                  )[cols],
                      hide_index=True, width="stretch", height=320,
                      column_config={"risk_rank": st.column_config.NumberColumn("rank"),
                                     "acct": st.column_config.TextColumn("account"),
                                     "risk": st.column_config.ProgressColumn("risk score", format="%.1f",
                                                                             min_value=0, max_value=100),
-                                    "half": st.column_config.TextColumn("account half")})
+                                    "half": st.column_config.TextColumn("account half"),
+                                    "red_flags": st.column_config.TextColumn(
+                                        "red flags", help="Short form. Pick the account in the money-trail "
+                                                          "explorer below to read each reason in full.")})
         st.caption(f"{len(view):,} of {len(wl):,} watchlist accounts match. Scores use only each account's own "
                    "money-flow patterns; the points per red flag were learned from the labels of the learning "
                    "half, on the learning days.")
@@ -622,7 +630,9 @@ with tab_q2:
                             + (f". Largest flow out to an unflagged account: {money_md(exits[0][0])} to "
                                f"`{exits[0][1]}`, worth checking as a possible cash-out point." if exits else "."))
                 row = wl[wl.acct == acct].iloc[0]
-                st.markdown(f"**Why {me} was flagged:** {row.reasons or 'channel risk only'}")
+                why = [r.strip() for r in str(row.reasons or "").split(";") if r.strip()]
+                bullets = "\n".join(f"- {r}" for r in why) if why else "- Channel risk only"
+                st.markdown(f"**Why {me} was flagged**\n\n{bullets}")
                 if has_split:
                     st.markdown("**Account half:** " + (
                         "graded. Its own labels were never used to build the scorecard."
@@ -736,7 +746,7 @@ with tab_ops:
                 vcol = {v: c for v, c in zip(sorted(summ.variant.unique()), [T["s1"], T["s2"], T["s3"]])}
                 fig = go.Figure([go.Bar(x=d.test, y=d.data_scanned_mb, name=v, marker=dict(color=vcol.get(v, T["s1"])),
                                         text=[f"{x:,.1f} MB" for x in d.data_scanned_mb], textposition="outside",
-                                        cliponaxis=False, textfont=dict(color=T["ink"], size=12),
+                                        cliponaxis=False, constraintext="none", textfont=dict(color=T["ink"], size=12),
                                         hovertemplate=f"{v}, %{{x}}: %{{y:,.1f}} MB<extra></extra>")
                                  for v, d in summ.groupby("variant")])
                 fig.update_layout(barmode="group", bargap=0.55, bargroupgap=0.15,
