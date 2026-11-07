@@ -102,6 +102,37 @@ SIGNAL_NAMES = {"sg_end": "Scatter-gather: start or end of the split", "sg_mule"
                 "fan_in": "Fan-in (paid by many in one day)", "segment": "Uses high-risk channels (Q1)"}
 
 
+def money(x) -> str:
+    x = float(x)
+    return f"${x / 1e6:,.1f}M" if x >= 1e6 else f"${x / 1e3:,.0f}K" if x >= 1e3 else f"${x:,.0f}"
+
+
+def flag_tags(r) -> str:
+    """Short version of an account's red flags, e.g. '28 cycles, splits funds, mule'."""
+    why = str(getattr(r, "reasons", "") or "")
+    tags = []
+    if "money cycle" in why:
+        n = int(getattr(r, "n_cycles", 0) or 0)
+        tags.append(f"{n} cycle{'s' if n != 1 else ''}" if n else "cycles")
+    if "scatter-gather source" in why:
+        tags.append("splits funds")
+    if "scatter-gather sink" in why:
+        tags.append("collects funds")
+    if "(mule)" in why:
+        tags.append("mule")
+    if "(fan-out)" in why:
+        tags.append(f"pays {int(getattr(r, 'max_daily_fan_out', 0) or 0)} in a day")
+    if "(fan-in)" in why:
+        tags.append(f"paid by {int(getattr(r, 'max_daily_fan_in', 0) or 0)} in a day")
+    if "gather-scatter" in why:
+        tags.append("gather-scatter")
+    if "hub account" in why:
+        tags.append("busy hub")
+    if "high-risk channels" in why:
+        tags.append("risky channels")
+    return ", ".join(tags[:3]) + (" +" if len(tags) > 3 else "")
+
+
 @st.cache_data(ttl=30, show_spinner=False)
 def s3_alerts(variant: str):
     import boto3
@@ -133,6 +164,7 @@ variant = st.sidebar.selectbox("Dataset variant", variants())
 st.sidebar.markdown(f"**Data source:** `{MODE}`" + (f", `s3://{BUCKET}`" if MODE == "athena" else ""))
 if MODE == "local":
     st.sidebar.warning("Local mode shows SYNTHETIC test data - not real findings.")
+st.sidebar.caption("Tip: every chart and table has a full-screen button in its top-right corner.")
 st.sidebar.markdown("---\n**Pipeline:** S3 → Glue ETL → Glue Catalog → Athena (Q1) → EMR Spark (Q2) → "
                     "Kafka live monitor → this dashboard. Orchestrated by Step Functions.")
 
@@ -318,8 +350,22 @@ with tab_q2:
                 show_truth = st.toggle("Reveal IBM's answer key (laundering transfers in red)", value=False,
                                        help="The labels are only used to check the watchlist afterwards; "
                                             "they are not used to draw the graph or to score this account.")
+                labels_on = st.segmented_control(
+                    "Labels on the graph", ["Off", "Flagged accounts", "All accounts"], default="Flagged accounts",
+                    help="Writes a one-line remark next to each dot. 'All accounts' is easiest to read full screen.")
                 risk = dict(zip(wl.acct, wl.risk_probability))
                 rank = dict(zip(wl.acct, wl.risk_rank))
+                tags = {r.acct: flag_tags(r) for r in wl.itertuples()}
+                me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
+
+                def flows(n):
+                    """Money between the selected account and n, from n's point of view."""
+                    got = g.edges[acct, n] if g.has_edge(acct, n) else None
+                    paid = g.edges[n, acct] if g.has_edge(n, acct) else None
+                    parts = ([f"received {money(got['usd'])} from {me}"] if got else []) + \
+                            ([f"paid {money(paid['usd'])} to {me}"] if paid else [])
+                    return ", ".join(parts)
+
                 # arrows: one annotation per transfer pair, pointing from payer to payee
                 arrows, mx, my, mtext = [], [], [], []
                 for u, v, d in g.edges(data=True):
@@ -334,25 +380,53 @@ with tab_q2:
                     mtext.append(f"{u} → {v}<br>{int(d['n']):,} transfer(s), ${d['usd']:,.0f}"
                                  + ("<br><b>laundering (answer key)</b>" if red else ""))
 
-                def label(n):
+                def hover(n):
                     if n in risk:
-                        return f"{n}<br>watchlist #{int(rank[n]):,}, risk {risk[n]:.2f}"
-                    return f"{n}<br>not on watchlist"
+                        extra = "" if n == acct else f"<br>{flows(n)}"
+                        return (f"<b>{n}</b><br>watchlist #{int(rank[n]):,}, risk {risk[n]:.2f}"
+                                f"<br>{tags[n] or 'channel risk only'}{extra}")
+                    return f"<b>{n}</b><br>not on watchlist<br>{flows(n)}"
 
+                def short(n):
+                    """One-line remark written next to a dot (kept short so the graph stays readable)."""
+                    if labels_on not in ("Flagged accounts", "All accounts"):
+                        return ""
+                    if n == acct:
+                        return f"<b>{me} (selected)</b>"
+                    if n in risk:
+                        return f"#{int(rank[n]):,}: {tags[n] or 'channel risk'}"
+                    return f"Not flagged: {flows(n)}" if labels_on == "All accounts" else ""
+
+                nodes = list(g.nodes)
                 fig = go.Figure([
                     go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=9, color="rgba(0,0,0,0)"),
                                text=mtext, hoverinfo="text", name="transfer"),
-                    go.Scatter(x=[pos[n][0] for n in g.nodes], y=[pos[n][1] for n in g.nodes], mode="markers",
-                               marker=dict(size=[22 if n == acct else 11 for n in g.nodes],
-                                           color=[risk.get(n, 0) for n in g.nodes], colorscale="Reds", cmin=0, cmax=1,
+                    go.Scatter(x=[pos[n][0] for n in nodes], y=[pos[n][1] for n in nodes], mode="markers+text",
+                               marker=dict(size=[22 if n == acct else 11 for n in nodes],
+                                           color=[risk.get(n, 0) for n in nodes], colorscale="Reds", cmin=0, cmax=1,
                                            line=dict(width=1, color="#333"), colorbar=dict(title="risk")),
-                               text=[label(n) for n in g.nodes], hoverinfo="text", name="account")])
-                fig.update_layout(height=420, showlegend=False, margin=dict(l=0, r=0, t=0, b=0), annotations=arrows,
+                               text=[short(n) for n in nodes], textposition="top center", textfont=dict(size=11),
+                               hovertext=[hover(n) for n in nodes], hoverinfo="text", name="account")])
+                fig.update_layout(height=460, showlegend=False, margin=dict(l=0, r=0, t=10, b=0), annotations=arrows,
                                   xaxis=dict(visible=False), yaxis=dict(visible=False))
                 st.plotly_chart(fig, width="stretch")
-                st.caption("Arrows point from payer to payee (transfers on the learning days, the account's 40 largest "
-                           "counterparties by USD). Hover a dot for its watchlist rank, or the middle of an arrow for "
-                           "the amount. White dots are accounts we did not flag.")
+                st.caption("Arrows point from payer to payee: transfers on the learning days, with the account's 40 "
+                           "largest counterparties by USD. White dots are accounts we did not flag. Hover a dot or the "
+                           "middle of an arrow for details; use the full-screen button for the clearest view.")
+
+                # investigator summary: who belongs in one case, and where money left the flagged group
+                ring = [n for n in nodes if n in risk]
+                inside = [d for u, v, d in g.edges(data=True) if u in risk and v in risk]
+                exits = sorted(((d["usd"], v) for u, v, d in g.edges(data=True) if u in risk and v not in risk),
+                               reverse=True)
+                if len(ring) > 1:
+                    others = sorted(int(rank[n]) for n in ring if n != acct)
+                    listed = ", ".join(f"#{r:,}" for r in others[:8]) + (" and more" if len(others) > 8 else "")
+                    st.info(f"**Suggested case:** {me} with {len(others)} flagged counterpart"
+                            f"{'y' if len(others) == 1 else 'ies'} ({listed}). Between them they moved "
+                            f"{money(sum(d['usd'] for d in inside))} in {sum(int(d['n']) for d in inside):,} transfers"
+                            + (f". Largest flow out to an unflagged account: {money(exits[0][0])} to {exits[0][1]}, "
+                               "worth checking as a possible cash-out point." if exits else "."))
                 row = wl[wl.acct == acct].iloc[0]
                 if has_split:
                     st.markdown("**Account half:** " + (
