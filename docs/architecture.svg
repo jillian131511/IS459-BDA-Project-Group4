@@ -18,12 +18,12 @@
   </defs>
   <rect width="1600" height="900" fill="#f8fafc"/>
   <text x="40" y="48" font-size="28" font-weight="800" fill="#0f172a">FOLLOW THE MONEY · end-to-end AML pipeline on AWS</text>
-  <text x="40" y="76" class="s">Batch layer learns where risk is (BQ1, BQ2) · speed layer applies it to every new transaction · one Step Functions workflow runs it all</text>
+  <text x="40" y="76" class="s">Batch layer learns where risk is (Q1, Q2) · speed layer applies it to every new transaction · one Step Functions workflow runs it all</text>
 
   <!-- orchestration band -->
   <rect x="300" y="100" width="1000" height="52" rx="12" fill="#ede9fe" stroke="#a78bfa"/>
   <text x="320" y="132" class="t" fill="#4c1d95">AWS Step Functions</text>
-  <text x="510" y="132" class="s">ETL → crawler → Athena BQ1 → (EMR BQ2 ∥ benchmark) · retries · auto-terminates EMR on failure</text>
+  <text x="510" y="132" class="s">ETL → crawler → Athena Q1 → (EMR Q2 ∥ benchmark) · retries · auto-terminates EMR on failure</text>
 
   <!-- lane labels -->
   <text x="40" y="190" class="lane">1 · INGEST</text>
@@ -57,7 +57,7 @@
   <text x="334" y="437" class="x">+ dq_report · fx_rates · patterns</text>
   <rect x="318" y="460" width="264" height="92" class="box"/>
   <text x="334" y="486" class="t">analytics/</text>
-  <text x="334" y="508" class="s">BQ1 segment risk · BQ2 watchlist</text>
+  <text x="334" y="508" class="s">Q1 segment risk · Q2 watchlist</text>
   <text x="334" y="528" class="s">evaluation · run_log (cost)</text>
   <text x="334" y="545" class="x">Athena tables via partition projection</text>
   <rect x="318" y="568" width="264" height="62" class="box"/>
@@ -76,13 +76,13 @@
 
   <!-- analyse -->
   <rect x="990" y="215" width="290" height="140" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
-  <text x="1008" y="243" class="t" fill="#155e75">BQ1 · Amazon Athena</text>
+  <text x="1008" y="243" class="t" fill="#155e75">Q1 · Amazon Athena</text>
   <text x="1008" y="266" class="s">Where is the risk? segment lift,</text>
   <text x="1008" y="286" class="s">Wilson lower bound, capture curve,</text>
   <text x="1008" y="306" class="s">time profile, bank corridors</text>
   <text x="1008" y="332" class="x">serverless SQL · UNLOAD → Parquet</text>
   <rect x="990" y="375" width="290" height="160" rx="12" fill="#fef2f2" stroke="#fca5a5"/>
-  <text x="1008" y="403" class="t" fill="#991b1b">BQ2 · Amazon EMR (Spark)</text>
+  <text x="1008" y="403" class="t" fill="#991b1b">Q2 · Amazon EMR (Spark)</text>
   <text x="1008" y="426" class="s">Who is moving it? fan-in/out,</text>
   <text x="1008" y="446" class="s">2-4 hop cycles, scatter-gather,</text>
   <text x="1008" y="466" class="s">weight-of-evidence scorecard +</text>
@@ -101,8 +101,8 @@
   <text x="1338" y="412" class="x">boto3 → Athena, small</text>
   <text x="1338" y="430" class="x">aggregated results only</text>
   <text x="1338" y="470" class="t" font-size="14">Users</text>
-  <text x="1338" y="492" class="s">AML monitoring team (BQ1)</text>
-  <text x="1338" y="512" class="s">Financial-crime investigators (BQ2)</text>
+  <text x="1338" y="492" class="s">AML monitoring team (Q1)</text>
+  <text x="1338" y="512" class="s">Financial-crime investigators (Q2)</text>
 
   <!-- speed layer -->
   <rect x="640" y="690" width="930" height="150" rx="14" fill="#fef2f2" stroke="#f87171" stroke-dasharray="6 4"/>
