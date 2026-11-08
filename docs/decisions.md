@@ -3,6 +3,30 @@
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 BQ1 / BQ2 are the two business questions (channels / networks), named as on the dashboard.
 
+## 2026-11-08 · Kafka replay sorted by event time (local fix; EC2 verification pending)
+
+The raw CSV is not strictly chronological. Kafka preserves publication order within a partition, but cannot
+sort event timestamps; the velocity rule's deque requires chronological events per sender. The producer now
+filters the requested interval, sorts it on temporary disk with SQLite, and applies `--max-events` after sorting.
+Equal timestamps retain file order. It no longer skips far-ahead rows or caps replay pauses. Sender keys use
+the same bank/account normalisation as the consumer; only one request per connection is in flight to preserve
+order across retries. Temporary disk is needed for the selected interval and its sort; preparation reads the
+entire source before publishing, even for a small event limit.
+
+Validation: `python -m unittest discover -s tests -p test_replay_order.py -v` passed locally. The regression checks
+shuffled timestamps, interval boundaries, equal-time ordering, limits after sorting and expiry of old velocity
+events. This is not an EC2/Kafka validation. Member 6 (Video B / Kafka demo) must deploy the updated producer
+and rerun `run_live_demo.sh`, which resets the topic and starts a fresh consumer. No batch rerun is needed.
+Re-measure live alert counts and latency before quoting them for this version; earlier Kafka figures below
+describe the old replay. Consumer latency starts at `produced_at`, excluding replay preparation and pacing.
+
+Proposal review also identified outstanding qualifications, not implemented fixes: BQ1 selects a prefix of
+Wilson-ranked segments rather than solving a maximum-capture optimisation; its curve is historical capture.
+BQ2's segment-risk feature uses labels from all accounts in the learning period, so its account holdout is not
+fully label-independent, although official grading uses later days. EMR has explicit Spark-failure cleanup and
+an idle-timeout fallback, but parallel-branch failure and termination failure prevent an unconditional shutdown
+guarantee. Money trails cover the top 300 accounts, not the entire top-1,000 watchlist.
+
 ## 2026-11-08 · Bank routes ranked by the Wilson lower bound; heatmap states its coverage
 
 The per-bank route chart ranked routes by raw lift, so a route with 1 laundering transfer in 50 (20x) beat one with
@@ -73,7 +97,7 @@ as the Kafka consumer (`streaming/monitor_core.py`):
 transfers. The velocity rule itself adds little on top of the channel and watchlist rules (3,652 alerts, 13 real);
 it is kept for the schemes those rules cannot see yet.
 
-Live replay through Kafka after the fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer now skips
+Historical replay, superseded by the 8 Nov ordering fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer then skipped
 rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
 inflate the alert precision on the Live monitor tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
 the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. The whole-day figure above
@@ -84,7 +108,7 @@ the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to a
 Kafka (KRaft, 3 partitions) and the dashboard run on one t3.large (`infra/launch_serving_ec2.sh`). Replay of
 HI-Small from the first grading day (8 Sep), 100,000 transfers in 285 s (about 350 a second), median delay from
 transfer to alert 25 ms at low load and about 0.2 s at full speed. A few later-dated rows sit early in the raw
-file; the producer now caps its pauses so they cannot stall the replay.
+file; the producer then capped its pauses. This behaviour was superseded by the 8 Nov ordering fix.
 
 Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 54 laundering = 0.058 %):
 

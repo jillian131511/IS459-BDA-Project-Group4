@@ -77,6 +77,10 @@ bash /opt/aml/streaming/run_live_demo.sh <bucket> HI-Small 2022/09/08
 aws ec2 stop-instances --instance-ids <id>   # when nobody is using it; start-instances brings both services back
 ```
 The replay starts at the first official grading day, so the stream only contains days the batch layer never learned from.
+The producer reads the source and sorts the selected interval on temporary disk before sending; allow time and
+disk space for preparation. The event limit applies after sorting, and no out-of-order events are dropped.
+After updating an existing server's `/opt/aml/streaming/producer.py`, rerun `run_live_demo.sh` for a fresh topic
+and consumer state; no batch rerun is needed. The ordering fix is locally tested; EC2 verification is pending.
 
 ### 5  After Week 13
 ```bash
@@ -106,9 +110,10 @@ watchlist. Window evidence: 1 -> 3 days nearly doubles same-days precision; 3 ->
 
 ## Design highlights
 * **Portable SQL, tested locally.** BQ1 SQL runs unchanged in Athena and SQLite; BQ2 SQL runs unchanged in Spark SQL and SQLite, so the exact logic deployed was tested on a laptop first.
-* **No label leakage, graded on the future.** Scorecard weights are learned on half the accounts (split on the 2nd-to-last character of the account id) and only from the learning days; the official precision is measured on the other half of the accounts, on later days. The streaming demo replays days the batch layer never saw.
+* **Graded on the future.** Scorecard weights are learned on half the accounts (split on the 2nd-to-last character of the account id) and only from the learning days; the official precision is measured on the other half, on later days. BQ1 segment-risk features use labels from all accounts in the learning period, so the account holdout is not fully label-independent. The streaming demo replays days the batch layer never saw.
 * **Tuned with evidence.** Heavy Spark steps are checkpointed, which cut BQ2 from 44 to about 3.6 minutes with an identical result; the 3-day window is backed by a 1/3/7-day experiment.
 * **Statistically honest ranking.** BQ1 ranks segments by the 95 % Wilson lower bound, so tiny lucky segments cannot top the list.
+  The dashboard's "alert-budget optimiser" selects a prefix of this ranking, not a guaranteed maximum-capture combination; capture is measured on the analysed historical period.
 * **Explainable by design.** Every watchlist account carries plain-English reasons; no black-box model.
 * **Cost-aware.** Columnar + partitioned storage, partition projection, transient EMR, lifecycle rules, per-query cost log, teardown script.
 

@@ -2,6 +2,18 @@
 
 Status key: ✅ done (and run on AWS where relevant) · 🔜 still to do on AWS · 👥 needs the team. Updated 8 Nov 2026.
 
+**8 Nov review qualifications:** the Kafka timestamp-ordering fix has passed a local regression test, but its
+EC2 deployment and fresh replay are pending (Member 6 / Video B); existing Kafka measurements predate it.
+No batch rerun is needed for that fix. The dashboard's budget optimiser selects a Wilson-ranked prefix and
+reports historical capture, not a guaranteed maximum. BQ2's BQ1 segment-risk feature uses all learning-period
+accounts' labels, so account holdout is not fully label-independent; official grading uses later days.
+EMR cleanup handles Spark success/failure and has an idle-timeout fallback, but shutdown is not unconditional.
+The top-1,000 watchlist has money trails for the top 300 accounts.
+
+The proposal's four X factors are **orchestration**, **near real-time**, **cost/performance evidence**, and
+**decision-grade visuals** (budget slider plus clickable money trails). Spark tuning is additional evidence,
+not a replacement for the fourth X factor. See `docs/decisions.md` for the implementation and pending checks.
+
 ## Deliverables
 | Requirement (brief slide) | Where it is met | Status |
 |---|---|---|
@@ -22,9 +34,9 @@ Status key: ✅ done (and run on AWS where relevant) · 🔜 still to do on AWS 
 ## Grading rubric → how we aim for A+
 | Rubric line | What A+ needs | Our evidence |
 |---|---|---|
-| Presentation & demo (s12) | Crystal clear, seamless, no clarification needed, **plus at least one meaningful X-factor** | One-click Step Functions run; pre-recorded backup clips; dashboard tells the story tab by tab; four X-factors, each with a stated purpose |
+| Presentation & demo (s12) | Crystal clear, seamless, no clarification needed, **plus at least one meaningful X-factor** | One-click Step Functions run; backup clips planned; four proposal X-factors implemented, with the replay ordering fix awaiting EC2 verification |
 | Problem solving & appropriateness (s13) | Challenging problem, very appropriate solution | Multi-hop network detection over up to 180M transfers is hard; every tool choice is justified against lecture content (`design.md` §3) |
 | Working pipeline & usability (s14) | No bugs, efficient, intuitive | 11-test local suite (incl. a dashboard smoke run); synthetic smoke test on AWS before real data; bugs found on AWS fixed and logged with evidence (`docs/decisions.md`); idempotent deploy; results identical run to run; dashboard needs no instructions |
 | Business value (s10) | Meaningful questions, clear beneficiaries, actionable insights | Budget slider: review 5 % of transfers, catch 76.7 % of laundering (HI-Large), with every segment to monitor listed and counted; official top-100 watchlist (HI-Large, graded on later days) is 67 % launderers vs 4.7 % at random |
-| X-factor (s11) | Clear purpose, not just complexity | Orchestration (repeatable, guaranteed EMR shutdown) · evidenced tuning (BQ2 44 → 3.6 min, identical result) and the 1/3/7-day window experiment · CSV vs Parquet (250× less data scanned) · Kafka speed layer (live alerts, velocity rule tuned on a learning day) |
+| X-factor (s11) | Clear purpose, not just complexity | Orchestration (repeatable, explicit EMR cleanup plus idle fallback) · Kafka speed layer (live alerts, ordering fix locally tested; EC2 replay pending) · CSV vs Parquet (reported 250× less data scanned; retain run logs) · decision-grade visuals (budget slider, rule list, clickable money trails). Additional evidence: BQ2 tuning and the 1/3/7-day window experiment |
 | ML/AI only if meaningful (s11) | – | Transparent WoE scorecard; explainable alerts; no black box |

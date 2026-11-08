@@ -55,7 +55,7 @@ Patterns file (normalised on read); enough USD-paired cross-currency transfers t
 | Glue crawler for curated tables; DDL + partition projection for analytics tables | Crawl everything | Crawler mirrors the lab; projection needs no re-crawl for new variants | W4 Glue lab; W5 s39 |
 | Athena for BQ1 | Redshift | Serverless SQL, pay per scan; brief asks to avoid Redshift | W5 s36 |
 | EMR (transient) for BQ2 | Glue, Athena | Multi-hop self-joins are iterative and memory-heavy; Spark caches intermediates; EMR gives control of size | W6 s28, s33-37 |
-| Step Functions | Manual runs, Airflow (MWAA) | Native Glue/EMR/Athena integrations, cheap, retries, guaranteed EMR termination | W4 s38 |
+| Step Functions | Manual runs, Airflow (MWAA) | Native Glue/EMR/Athena integrations, cheap, retries, explicit EMR cleanup and idle-timeout fallback | W4 s38 |
 | Kafka on EC2 | Kinesis, MSK | Taught in W7; partitions keyed by sender keep per-account order for the velocity window | W7 s23-24 |
 | Streamlit + boto3 → Athena | QuickSight | Brief asks to avoid QuickSight; lab pattern; only small aggregates leave Athena | W5 s37 |
 
@@ -65,7 +65,9 @@ applies batch outputs (watchlist, segment risk, FX) plus one stateful rule (24 h
 stream can evaluate in time.
 
 **Scalability / fault tolerance.** HDFS-style replication is replaced by S3 durability; Spark recomputes lost
-partitions; Step Functions retries Glue concurrency errors and always terminates EMR; Kafka can scale consumers
+partitions; Step Functions retries Glue concurrency errors and explicitly terminates EMR after Spark success or
+failure, with a 30-minute idle-timeout fallback. Parallel-branch and termination failures mean shutdown is not
+unconditionally guaranteed. Kafka can scale consumers
 up to the number of partitions (3).
 
 ## 4. BQ2 method details
@@ -91,6 +93,8 @@ up to the number of partitions (3).
   expected result of picking accounts blindly.
 * Limitations: naive-Bayes-style WoE double-counts correlated flags (ranking still valid, probabilities optimistic);
   cycles longer than 4 hops are not enumerated (cost grows exponentially); labels are synthetic.
+  BQ1 segment-risk features use labels from all learning-period accounts, including holdout accounts. The
+  account holdout is therefore not fully label-independent; official evaluation still grades on later days.
 
 ## 5. Streaming rules (speed layer)
 
@@ -101,3 +105,10 @@ up to the number of partitions (3).
    accounts (merchants, payroll) are excluded. Threshold chosen on a learning-day replay (`decisions.md`, 4 Nov).
 
 The consumer reports alert rate, alert precision (from labels, for the demo only) and p50/p95 latency.
+
+The Kafka producer sorts the selected interval by event timestamp using temporary SQLite storage before sending.
+Equal-time events retain file order, the event limit applies after sorting, and no far-ahead rows are dropped.
+Preparation reads the entire source and needs temporary disk space. Latency is measured from publication,
+excluding preparation and replay pacing. The ordering fix is tested locally; deployment and a fresh Kafka replay
+are required before reporting updated live measurements. BQ1's budget selector is a Wilson-ranked prefix with
+historical capture, rather than a guaranteed optimal allocation.

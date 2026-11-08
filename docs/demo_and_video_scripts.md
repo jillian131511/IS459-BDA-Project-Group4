@@ -78,6 +78,14 @@ The resources already exist, so every command below **updates** them (all script
 
 ## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records an HI-Large run
 
+**Before the Kafka recording:** deploy the updated `streaming/producer.py` to
+`/opt/aml/streaming/producer.py` on the existing serving EC2. The 8 Nov ordering fix is locally tested, not yet
+verified on EC2. Step 4 below resets the topic and starts a fresh consumer; this producer-only update does not
+require step 1 or a batch rerun. Record a new live clip and fresh alert/latency measurements. The producer first
+reads the entire source and sorts the selected interval on temporary disk, so allow preparation time and disk
+space before alerts begin. It keeps all selected events and applies the event limit after chronological sorting.
+The full batch execution in step 1 is part of the end-to-end video, not a prerequisite for deploying this fix.
+
 1. Step Functions → `aml-pipeline` → **Start execution**, input
    `{"variant":"HI-Large","core_nodes":8,"instance_type":"m5.2xlarge","run_benchmark":true,"train_until":"2022-10-08","test_until":"2022-11-06","window_days":"3"}`;
    narrate each state as it turns green, speed up the waiting (3 min). The run takes about 21 min and
@@ -95,8 +103,10 @@ README and the appendix slide.
 ## 4 · Likely Q&A and short answers
 * **Why EMR and not Glue for BQ2?** Multi-hop self-joins are iterative and memory-heavy; Spark on EMR lets us keep
   intermediate results and size the cluster; it is transient so it costs only while running (W6 s28, s33).
-* **Isn't the precision inflated because you used the labels?** Weights are learned on one half of the accounts and
-  only from the learning days; the official figure is measured on the other half, on later days (8-10 Sep). We also
+* **Isn't the precision inflated because you used the labels?** WoE weights are learned on one half of the accounts and
+  only from the learning days; the official figure is measured on the other half, on later days (8-10 Sep for HI-Small).
+  BQ1 segment-risk features use labels from all learning-period accounts, so the account holdout is not fully
+  label-independent. Future-day evaluation is the stronger evidence. We also
   found and fixed a split that graded only 3 % of accounts (`docs/decisions.md`).
 * **Why 3 days?** Measured: 1 -> 3 days nearly doubles precision and finds the most laundering attempts; 3 -> 7 adds
   0.4 points and costs 39 % more path-join time.
