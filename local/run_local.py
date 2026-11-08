@@ -91,6 +91,9 @@ def main():
     print(f"Q2 done in {time.time() - t0:.1f}s")
     for name in OUTPUTS:
         pd.read_sql_query(f"SELECT * FROM {name}", con).to_csv(os.path.join(a.out, f"q2_{name}.csv"), index=False)
+    # hub accounts (more counterparties than hub_degree on the learning days), as emr/network_risk.py publishes
+    # them: the live velocity rule skips them
+    pd.read_sql_query(f"SELECT acct FROM account_stats WHERE total_degree > {params['hub_degree']}", con)         .to_csv(os.path.join(a.out, "hubs.csv"), index=False)
     for f in ["dq_report", "fx_rates"]:
         pd.read_sql_query(f"SELECT * FROM {f}", con).to_csv(os.path.join(a.out, f"{f}.csv"), index=False)
     print("outputs:", sorted(os.path.basename(p) for p in glob.glob(os.path.join(a.out, "*.csv"))))

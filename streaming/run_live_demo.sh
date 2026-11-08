@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs ON the serving EC2 (infra/launch_serving_ec2.sh). Starts the consumer, then replays the official grading
-# days (never used for learning) through Kafka; alerts appear on the dashboard's Live tab within seconds.
+# days (never used for learning) through Kafka; alerts appear on the dashboard's Live monitor tab within seconds.
 #
 #   bash /opt/aml/streaming/run_live_demo.sh <bucket> [variant=HI-Small] [start=2022/09/08] [events=300000] [speed=600] [end=2022/09/11]
 #
