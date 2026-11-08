@@ -174,8 +174,8 @@ def lift_heatmap(h: pd.DataFrame, x_title: str, label_from: float = None, height
         z=z.values, x=[str(c) for c in vals.columns], y=list(vals.index), customdata=vals.values,
         colorscale=T["heat"], zmin=0, zmax=top, xgap=2, ygap=2,
         text=text.values, texttemplate="%{text}", textfont=dict(size=12, color="#ffffff"),
-        hovertemplate="%{y}, %{x}<br>lift %{customdata:.1f}x<extra></extra>",
-        colorbar=dict(title=dict(text="lift", font=dict(color=T["muted"], size=12)), tickvals=ticks,
+        hovertemplate="%{y}, %{x}<br>observed lift %{customdata:.1f}x<extra></extra>",
+        colorbar=dict(title=dict(text="observed lift", font=dict(color=T["muted"], size=12)), tickvals=ticks,
                       ticktext=["1x (avg)" if t == 0 else f"{10 ** t:g}x" for t in ticks],
                       tickfont=dict(color=T["ink2"]), outlinewidth=0, thickness=12)))
     fig.update_xaxes(title=x_title, type="category")
@@ -469,7 +469,7 @@ with tab_q1:
             n_rules = len(chosen)
             st.subheader(f"Monitoring rules at this budget · {n_rules:,} segment{'s' if n_rules != 1 else ''}")
             st.caption("Every segment inside the budget, ranked by the 95% Wilson lower bound of the laundering "
-                       "rate, so small lucky segments cannot top the list.")
+                       "rate, so small lucky segments cannot top the list. The lift column shows observed lift.")
             rules = chosen.assign(
                 corridor=lambda d: d.is_cross_bank.map({1: "cross-bank", 0: "same bank"}),
                 fx=lambda d: d.is_cross_currency.map({1: "cross-currency", 0: "same currency"}),
@@ -477,7 +477,7 @@ with tab_q1:
             st.dataframe(rules[["risk_rank", "payment_format", "payment_currency", "corridor", "fx", "amount_band",
                                 "n_txn", "n_laundering", "rate", "lift"]], hide_index=True, width="stretch",
                          column_config={"rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
-                                        "lift": st.column_config.NumberColumn("lift", format="%.1fx"),
+                                        "lift": st.column_config.NumberColumn("observed lift", format="%.1fx", help="Observed laundering rate divided by the overall rate."),
                                         "risk_rank": st.column_config.NumberColumn("rank"),
                                         "payment_format": "payment", "payment_currency": "currency",
                                         "amount_band": "amount (USD)",
@@ -485,24 +485,26 @@ with tab_q1:
                                         "n_laundering": st.column_config.NumberColumn("laundering", format="%d")})
 
         st.subheader("Risk patterns across all transfers")
-        st.caption("Everything below covers the whole dataset and does not change with the review budget above.")
+        st.caption("Everything below covers the whole dataset and does not change with the review budget above. "
+                   "Observed lift = observed laundering rate / overall rate. Conservative lift uses the 95% Wilson "
+                   "lower bound of that rate / overall rate, reducing the influence of small samples.")
 
         fc = load("q1_format_currency", variant)
         tp = load("q1_time_profile", variant)
         c1, c2 = st.columns(2)
         if not fc.empty:
             h = fc[fc.n_txn >= 30].pivot_table(index="payment_currency", columns="payment_format", values="lift")
-            c1.subheader("Risk lift: payment format and currency")
+            c1.subheader("Observed lift: payment format and currency")
             show(lift_heatmap(h, "payment format", label_from=10, height=460), c1)
-            c1.caption("Red marks combinations riskier than average (lift above 1x); numbers mark the hotspots "
+            c1.caption("Red marks combinations riskier than average (observed lift above 1x); numbers mark the hotspots "
                        "(10x or more). Combinations with fewer than 30 transfers are left blank.")
             csv_button(ranked_lift_data(fc[fc.n_txn >= 30], ["payment_format", "payment_currency"]),
-                       "Download as CSV", f"{variant}_payment_currency_by_lift.csv", where=c1,
-                       help="Every combination shown above, riskiest first, with exact counts and rates.")
+                       "Download payment / currency groups (CSV)", f"{variant}_payment_currency_by_lift.csv", where=c1,
+                       help="Every combination shown above, ranked by observed lift (CSV column: lift), with exact counts and rates.")
         if not tp.empty:
             t = tp.assign(day=tp.day_of_week.map(DOW)).pivot_table(index="day", columns="txn_hour", values="lift")
             t = t.reindex([d for d in DOW.values() if d in t.index])
-            c2.subheader("When does laundering happen? (lift by hour)")
+            c2.subheader("When does laundering happen? (observed lift by hour)")
             show(lift_heatmap(t, "hour of day", height=460), c2)
             wk = tp.day_of_week >= 6
             rate = lambda m: tp[m].n_laundering.sum() / max(tp[m].n_txn.sum(), 1)
@@ -511,10 +513,10 @@ with tab_q1:
             peaks = ", ".join(f"{DOW[int(r.day_of_week)]} {int(r.txn_hour):02d}:00 ({r.lift:.1f}x)"
                               for r in hot.itertuples())
             c2.caption(f"Weekend transfers are **{ratio:.1f}x** as likely to be laundering as weekday ones. "
-                       f"Riskiest hours: {peaks}. Hover a cell for its exact lift.")
+                       f"Riskiest hours: {peaks}. Hover a cell for its observed lift.")
             csv_button(ranked_lift_data(tp.assign(day=tp.day_of_week.map(DOW)), ["day_of_week", "day", "txn_hour"]),
-                       "Download as CSV", f"{variant}_day_hour_by_lift.csv", where=c2,
-                       help="Every day-and-hour slot, riskiest first, with exact counts and rates.")
+                       "Download day / hour slots (CSV)", f"{variant}_day_hour_by_lift.csv", where=c2,
+                       help="Every day-and-hour slot, ranked by observed lift (CSV column: lift), with exact counts and rates.")
         bc = load("q1_bank_corridors", variant)
         if not bc.empty:
             bc = route_risk(bc.assign(from_bank=bc.from_bank.astype(str), to_bank=bc.to_bank.astype(str)))
@@ -527,7 +529,7 @@ with tab_q1:
             route_chart_key = f"corridor_chart_{variant}"
             route_notice_key = f"corridor_notice_{variant}"
             heat_key = f"corridor_heatmap_{variant}"
-            ROUTE_TABS = ["Heatmap: route risk between the busiest banks", "Riskiest routes from one bank",
+            ROUTE_TABS = ["Heatmap: observed lift between the busiest banks", "Routes from one bank: conservative lift",
                           "Routes moving the most laundered money"]
             tabs_key = f"corridor_tabs_{variant}"
             # keyed tabs (Streamlit 1.65+) remember the open tab, so a heatmap click can switch to the route chart
@@ -541,7 +543,7 @@ with tab_q1:
                 cells = bc[bc.from_bank.isin(top_s) & bc.to_bank.isin(top_r)]
 
                 def open_heat_sender():
-                    """Clicking a cell selects its sender bank in the 'Riskiest routes from one bank' tab."""
+                    """Clicking a cell selects its sender bank in the 'Routes from one bank: conservative lift' tab."""
                     points = st.session_state.get(heat_key, {}).get("selection", {}).get("points", [])
                     bank = next((p.get("customdata") for p in reversed(points)
                                  if isinstance(p.get("customdata"), str)), None)
@@ -550,7 +552,7 @@ with tab_q1:
                             st.session_state[sender_key] = bank
                             st.session_state[tabs_key] = ROUTE_TABS[1]
                             st.session_state[route_notice_key] = (
-                                f"Showing bank {bank}'s routes, ranked by how confident we can be of their risk (95% Wilson lower bound).")
+                                f"Showing bank {bank}'s routes, ranked by conservative lift (95% Wilson lower bound).")
 
                 if cells.empty:
                     st.info("None of the busiest banks share a qualifying route.")
@@ -566,7 +568,7 @@ with tab_q1:
                         x=[f"to {b}" for b in cells.to_bank], y=[f"from bank {b}" for b in cells.from_bank],
                         mode="markers", marker=dict(symbol="square", size=24, color="rgba(0,0,0,0)"),
                         customdata=cells.from_bank.tolist(), showlegend=False, hoverinfo="text",
-                        hovertext=[f"Bank {r.from_bank} → bank {r.to_bank}<br>lift {r.lift:.1f}x<br>"
+                        hovertext=[f"Bank {r.from_bank} → bank {r.to_bank}<br>observed lift {r.lift:.1f}x<br>"
                                    f"{int(r.n_txn):,} transfers, {int(r.n_laundering):,} laundering<br>"
                                    f"laundered {money(r.laundered_usd)}<br><i>click to pick bank {r.from_bank} "
                                    "in the next tab</i>" for r in cells.itertuples()]))
@@ -574,15 +576,15 @@ with tab_q1:
                     st.plotly_chart(fig, width="stretch", theme=None, key=heat_key,
                                     on_select=open_heat_sender, selection_mode="points")
                     share = cells.laundered_usd.sum() / max(bc.laundered_usd.sum(), 1e-9)
-                    st.caption(f"Banks are chosen by volume, colour shows risk: rows are the {len(top_s)} banks sending "
+                    st.caption(f"Banks are chosen by volume, colour shows observed lift: rows are the {len(top_s)} banks sending "
                                f"the most laundered value, columns the {len(top_r)} receiving the most, and each cell is "
-                               f"one route's lift (numbers mark 10x or more). These {len(cells):,} routes carry "
+                               f"one route's observed lift (numbers mark 10x or more). These {len(cells):,} routes carry "
                                f"**{share:.0%} of the laundered value** on qualifying routes; pick any bank in the next "
                                "tab for the rest. Blank means that route is below the bar above, not that no money "
                                "moved. Click a cell to see all routes from its sender bank.")
-                    csv_button(routes_export(cells), f"Download these {len(cells):,} routes (CSV)",
+                    csv_button(routes_export(cells), f"Download {len(cells):,} heatmap routes (CSV)",
                                f"{variant}_bank_routes_heatmap.csv",
-                               help="The routes in this grid, riskiest first, with counts, rates, lift and USD values.")
+                               help="The routes in this grid, ranked by conservative lift. CSV: lift = observed lift; lift_at_95pct_lower_bound = conservative lift.")
             with t_risk:
 
                 def open_receiver_as_sender():
@@ -593,7 +595,7 @@ with tab_q1:
                     if bank in sent.index:
                         st.session_state[sender_key] = bank
                         st.session_state[route_notice_key] = (
-                            f"Showing bank {bank}'s routes, ranked by how confident we can be of their risk (95% Wilson lower bound).")
+                            f"Showing bank {bank}'s routes, ranked by conservative lift (95% Wilson lower bound).")
                     elif bank is not None:
                         st.session_state[route_notice_key] = (
                             f"Bank {bank} sends on no route that meets the bar above, so there is nothing to open. "
@@ -612,16 +614,16 @@ with tab_q1:
                 fig = go.Figure(go.Bar(
                     y=ylabels, x=routes.lb_lift, orientation="h", marker=dict(color=T["s1"]), width=0.6,
                     customdata=routes.to_bank.tolist(),
-                    text=[f"{r.lift:.1f}x · {int(r.n_txn):,} transfers · confidently ≥ {r.lb_lift:.1f}x"
+                    text=[f"conservative {r.lb_lift:.1f}x | observed {r.lift:.1f}x | {int(r.n_txn):,} transfers"
                           for r in routes.itertuples()],
                     textposition="outside", cliponaxis=False, constraintext="none",
                     textfont=dict(color=T["ink"], size=13),
-                    hovertext=[f"Bank {sender} → bank {r.to_bank}<br>lift {r.lift:.1f}x; confidently at least "
+                    hovertext=[f"Bank {sender} → bank {r.to_bank}<br>observed lift {r.lift:.1f}x; conservative lift "
                                f"{r.lb_lift:.1f}x (95% Wilson lower bound)<br>{int(r.n_txn):,} transfers, "
                                f"{int(r.n_laundering):,} laundering ({r.laundering_rate * 100:.2f}%)<br>"
                                f"laundered {money(r.laundered_usd)}<br><i>click to open bank {r.to_bank} as sender</i>"
                                for r in routes.itertuples()], hoverinfo="text"))
-                fig.update_xaxes(title="risk we can be confident of (lift at the 95% Wilson lower bound)",
+                fig.update_xaxes(title="conservative lift (95% Wilson lower bound)",
                                  showgrid=True, gridcolor=T["grid"], range=[0, float(routes.lb_lift.max()) * 1.9 or 1],
                                  ticksuffix="x")
                 fig.update_yaxes(type="category", autorange="reversed", showgrid=False)
@@ -631,11 +633,14 @@ with tab_q1:
                 st.caption(f"{'All' if n_routes <= 15 else f'Top {len(routes)} of'} {n_routes:,} route"
                            f"{'s' if n_routes != 1 else ''} from bank {sender}, ranked by how confident we can be of their risk "
                            "(95% Wilson lower bound, as for the monitoring rules), so a route with only a few transfers "
-                           "cannot top the list on one lucky case. The bar is that confident lift; the label starts "
-                           "with the route's actual lift. Click a bar to follow the money to that bank.")
+                           "cannot top the list on one lucky case. Bar length shows conservative lift; labels also show "
+                           "observed lift. Click a bar to follow the money to that bank.")
                 csv_button(routes_export(bc[bc.from_bank == sender]),
                            f"Download all {n_routes:,} routes from bank {sender} (CSV)",
-                           f"{variant}_routes_from_bank_{sender}.csv")
+                           f"{variant}_routes_from_bank_{sender}.csv",
+                           help="All qualifying routes from the selected sender, including those beyond the 15 shown; "
+                                "ranked by conservative lift within this bank. CSV: lift = observed lift; "
+                                "lift_at_95pct_lower_bound = conservative lift (95% Wilson lower bound).")
             with t_value:
                 top = bc.sort_values("laundered_usd", ascending=False)
                 st.dataframe(top.head(15).assign(rate=top.laundering_rate * 100)[
@@ -648,12 +653,12 @@ with tab_q1:
                                    "usd_volume": st.column_config.NumberColumn("total value (USD)", format="compact"),
                                    "laundered_usd": st.column_config.NumberColumn("laundered (USD)", format="compact"),
                                    "rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
-                                   "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
+                                   "lift": st.column_config.NumberColumn("observed lift", format="%.1fx", help="Observed laundering rate divided by the overall rate.")})
                 st.caption(f"Top 15 of {len(top):,} routes by laundered value.")
-                csv_button(routes_export(bc, by="value"), f"Download all {len(top):,} routes (CSV)",
+                csv_button(routes_export(bc, by="value"), f"Download all {len(top):,} bank routes by value (CSV)",
                            f"{variant}_bank_routes_all.csv",
-                           help="Every qualifying route, most laundered value first; rank_by_risk gives the "
-                                "Wilson lower-bound rank.")
+                           help="Every qualifying route, most laundered value first. CSV: lift = observed lift; "
+                                "lift_at_95pct_lower_bound = conservative lift; rank_by_risk ranks conservative lift.")
 
 # ----------------------------------------------------------------------------------------------- BQ2
 with tab_q2:
