@@ -10,8 +10,8 @@ Goat runs the pipeline; each member owns one part, checks it in the console, pre
 | 1 · Goat | Running the pipeline, cost, teardown, repo | Step Functions executions, Billing → Cost Explorer | – |
 | 2 | Ingestion (self-terminating EC2, manifests) + Step Functions | S3 `raw/`, `raw/_manifests/`, EC2 instances, Step Functions graph | **Films Video A** |
 | 3 | Glue cleaning, data quality, exchange rates | Glue → ETL jobs → Runs; Athena `aml.dq_report`, `aml.fx_rates` | – |
-| 4 | Q1 in Athena, budget slider, CSV vs Parquet | Athena `aml.q1_segment_risk`; S3 `analytics/run_log/` | – |
-| 5 | Q2 on EMR, grading, tuning + window evidence | EMR → Clusters → Steps (+ Spark history UI); Athena `aml.q2_evaluation_time` | – |
+| 4 | BQ1 in Athena, budget slider, CSV vs Parquet | Athena `aml.q1_segment_risk`; S3 `analytics/run_log/` | – |
+| 5 | BQ2 on EMR, grading, tuning + window evidence | EMR → Clusters → Steps (+ Spark history UI); Athena `aml.q2_evaluation_time` | – |
 | 6 | Dashboard, Kafka speed layer | Dashboard link; Kafka EC2 | **Films and edits Video B**, uploads both |
 
 Each member logs into the team console with the group login (never with the IAM access key).
@@ -23,9 +23,9 @@ Each member logs into the team console with the group login (never with the IAM 
 | 0:00-1:30 | Member 1 | Recap: two questions, users, architecture slide |
 | 1:30-3:00 | Member 2 | S3 raw zone + an ingestion manifest; Step Functions graph of the finished official HI-Large run (all green) |
 | 3:00-4:30 | Member 3 | Glue job run details; curated Parquet day folders; `aml.dq_report` in Athena |
-| 4:30-6:30 | Member 4 | Dashboard Q1 tab: move the budget slider live; heatmaps; CSV vs Parquet bytes scanned |
-| 6:30-9:00 | Member 5 | Dashboard Q2 tab: grading table (same days vs 8-10 Sep); watchlist; one account in the money-trail explorer; the tuning and window tables |
-| 9:00-11:00 | Member 6 | Kafka: producer + consumer, Live tab fills with alerts (or the recorded clip) |
+| 4:30-6:30 | Member 4 | Dashboard BQ1 tab: move the budget slider live (the rule-list heading shows how many segments to monitor); heatmaps, then click a cell in the bank-route heatmap to open that bank's routes; CSV vs Parquet bytes scanned |
+| 6:30-9:00 | Member 5 | Dashboard BQ2 tab, top to bottom: watchlist (search "cycle", click a row to open its money trail), then click a flagged neighbour to jump to its trail; scroll to "How the watchlist is scored and graded" for the grading chart (official vs same days); the tuning and window tables |
+| 9:00-11:00 | Member 6 | Kafka: producer + consumer, Live monitor tab fills with alerts (or the recorded clip) |
 | 11:00-12:30 | Member 1 | Cost from Cost Explorer; teardown plan; individual-contributions slide |
 | 12:30-15:00 | all | Buffer + Q&A |
 
@@ -58,7 +58,7 @@ The resources already exist, so every command below **updates** them (all script
    `Deployed.` (no `"Location"` line: the bucket already exists). Then show in the console: S3 bucket, Glue → Data
    Catalog → `aml` tables, Glue → ETL jobs, Glue → Crawlers, Step Functions → `aml-pipeline` → Graph view (2 min).
 5b. Step Functions → `aml-pipeline` → Graph view → click **Create transient EMR cluster** → its definition
-   (instance type and count, auto-termination, tags). Say: *"Q2's Spark cluster is not kept running. The pipeline
+   (instance type and count, auto-termination, tags). Say: *"BQ2's Spark cluster is not kept running. The pipeline
    creates it for each run and deletes it afterwards, so it only costs while it works."* (30 s)
 6. `export KAGGLE_API_TOKEN=KGAT_...` (own token) → `bash infra/launch_ingestion_ec2.sh HI-Small` →
    EC2 → Instances: `aml-ingest` Running, then Terminated after ~2 min (2 min, speed up the wait).
@@ -84,23 +84,23 @@ The resources already exist, so every command below **updates** them (all script
    costs about USD 2; it rewrites the same official results, so the numbers stay the same.
 2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Large' ORDER BY risk_rank LIMIT 10` and
    `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Large' ORDER BY period, k` (1 min).
-3. Dashboard: Q1 tab (slider) and Q2 tab (watchlist, money trail) (2 min).
+3. Dashboard: BQ1 tab (slider) and BQ2 tab (watchlist, money trail) (2 min).
 4. Kafka: Systems Manager → Run Command on `aml-serving`: `bash /opt/aml/streaming/run_live_demo.sh is459-g2-aml-050752609589 HI-Small 2022/09/08`
-   → the dashboard **Live** tab fills with alerts (1 min).
+   → the dashboard **Live monitor** tab fills with alerts (1 min).
 5. S3 `analytics/run_log/`: bytes scanned and cost per query (30 s).
 
 Record every attempt; keep the clean one. Upload both videos to YouTube (unlisted) and add the links to the
 README and the appendix slide.
 
 ## 4 · Likely Q&A and short answers
-* **Why EMR and not Glue for Q2?** Multi-hop self-joins are iterative and memory-heavy; Spark on EMR lets us keep
+* **Why EMR and not Glue for BQ2?** Multi-hop self-joins are iterative and memory-heavy; Spark on EMR lets us keep
   intermediate results and size the cluster; it is transient so it costs only while running (W6 s28, s33).
 * **Isn't the precision inflated because you used the labels?** Weights are learned on one half of the accounts and
   only from the learning days; the official figure is measured on the other half, on later days (8-10 Sep). We also
   found and fixed a split that graded only 3 % of accounts (`docs/decisions.md`).
 * **Why 3 days?** Measured: 1 -> 3 days nearly doubles precision and finds the most laundering attempts; 3 -> 7 adds
   0.4 points and costs 39 % more path-join time.
-* **What did tuning change?** Checkpointing the heavy Spark steps: Q2 went from 44 to about 3.6 minutes with an
+* **What did tuning change?** Checkpointing the heavy Spark steps: BQ2 went from 44 to about 3.6 minutes with an
   identical watchlist (Week 10 loop: observe, hypothesise, change one thing, measure).
 * **Why Wilson lower bound?** A segment with 1 laundering case out of 2 has a 50 % raw rate but tells us almost
   nothing; the lower bound ranks by risk we are statistically confident about.

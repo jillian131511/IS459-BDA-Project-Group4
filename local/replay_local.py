@@ -1,7 +1,7 @@
 """
 Local stand-in for producer + Kafka + consumer: replays the last N days of the synthetic raw CSV through
 streaming/monitor_core.py exactly as the Kafka consumer would, and writes streaming/out/alerts.jsonl + stats.json
-so the dashboard's Live tab can be developed and tested without Kafka.
+so the dashboard's Live monitor tab can be developed and tested without Kafka.
 
 Usage: python local/replay_local.py --raw data/raw/SYN-Small_Trans.csv --analytics data/analytics --curated data/curated
 """
@@ -25,10 +25,17 @@ def main():
     ap.add_argument("--curated", default="data/curated")
     ap.add_argument("--start", default="2022/09/08")
     ap.add_argument("--out", default=os.path.join(ROOT, "streaming", "out"))
+    # same settings as the Kafka consumer (streaming/consumer.py): threshold 11, hub accounts excluded
+    ap.add_argument("--velocity-k", type=int, default=11, help="distinct payees in 24 h that raise a velocity alert")
     a = ap.parse_args()
 
+    hubs_csv = os.path.join(a.analytics, "hubs.csv")
+    hubs = [r["acct"] for r in csv.DictReader(open(hubs_csv))] if os.path.exists(hubs_csv) else []
     model = RiskModel(open(os.path.join(a.analytics, "q2_watchlist.csv")).read(),
-                      open(os.path.join(a.analytics, "q1_segment_risk.csv")).read())
+                      open(os.path.join(a.analytics, "q1_segment_risk.csv")).read(),
+                      velocity_k=a.velocity_k, hubs=hubs)
+    print(f"velocity k={a.velocity_k}, {len(hubs)} hubs excluded"
+          + ("" if hubs else " (no hubs.csv: rerun local/run_local.py)"))
     fx = {r["currency"]: float(r["units_per_usd"]) for r in csv.DictReader(open(os.path.join(a.curated, "fx_rates.csv")))}
     os.makedirs(a.out, exist_ok=True)
     alerts, lat, n = [], [], 0

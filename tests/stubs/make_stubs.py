@@ -24,6 +24,7 @@ class _St(types.ModuleType):
         return _Any()
 
 sys.modules["streamlit"] = _St("streamlit")
+sys.modules["streamlit"].session_state = {}
 for m in ["plotly", "plotly.express", "plotly.graph_objects"]:
     sys.modules[m] = _St(m)
 sys.modules["plotly"].express = sys.modules["plotly.express"]

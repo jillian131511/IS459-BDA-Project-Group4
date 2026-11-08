@@ -1,11 +1,53 @@
 # Decision log
 
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
+BQ1 / BQ2 are the two business questions (channels / networks), named as on the dashboard.
+
+## 2026-11-08 · Checked against the Week 9 proposal: bank-route heatmap added, full 1,000-account watchlist
+
+The proposal promised a heatmap by bank-to-bank route and a 1,000-account watchlist. The dashboard had only a
+corridor table and showed the first 300 watchlist accounts. Both are display changes on existing Athena tables
+(`q1_bank_corridors`, `q2_watchlist` already holds 1,000 accounts), so no pipeline rerun was needed. The route
+heatmap covers the 20 banks sending x the 20 receiving the most laundered value (the full matrix would be thousands
+wide on HI-Large and almost empty); clicking a cell opens that sender in the per-bank route chart. CSV downloads
+were added for every heatmap and the route views. All click-throughs (watchlist row, money-trail node, heatmap
+cell, route bar) were checked in a browser. A sidebar link to the Kaggle dataset was tried and dropped: the README
+already cites the source.
+
+## 2026-11-08 · Local replay uses the same live rules as Kafka; graph labels never overlap
+
+`local/replay_local.py` still used the old velocity rule (8 payees, hubs included), so local replays scored
+differently from the Kafka consumer. `local/run_local.py` now writes `hubs.csv` with the same rule as the EMR job,
+and the replay uses it with threshold 11 (on SYN-Small: 15 hubs excluded). The money-trail graph places labels
+before drawing (flagged accounts first, then the largest flows), trying the 8 positions around each dot; a label
+with no free spot is shortened or left to the hover, and the caption says how many. Flagged accounts' labels also
+show what they paid or received.
+
+## 2026-11-08 · BQ2 laid out for investigators; click an account to open its trail
+
+The BQ2 tab now leads with the investigator tools (watchlist and money trail, in one box) and ends with the
+evidence ("How the watchlist is scored and graded"), captioned as unaffected by the search or filter.
+Clicking a node in the money-trail graph, or a row in the watchlist table, opens that account's trail, as long as
+it is in the top 300 (the accounts with published trails) and matches the watchlist search and graded-half filter;
+otherwise a note says why and the selection stays. Graph clicks are ported from the `dashboard-bq1-heatmaps` branch.
+Needs Streamlit 1.49+ (chart and table selection events).
+
+Two bugs fixed on the way, both when the graded-half filter removes the selected account: the dropdown kept showing
+the old account while the graph moved on (the picker is now set explicitly), and the table's tick stayed on the
+same row number, now a different account (the tick is cleared whenever the account changes outside the table).
+
+## 2026-11-08 · BQ1 lists every monitoring rule inside the budget
+
+The alert-budget optimiser used to show only the first 25 segments that fit the chosen review budget, while the
+"Segments to monitor" figure counted all of them (e.g. 76 at 5 %). The table now lists every segment inside the
+budget, under a heading that states the count ("Monitoring rules at this budget · 76 segments"). The slider and
+everything it drives sit in one box; the heatmaps and bank routes below are labelled as covering all transfers,
+independent of the budget.
 
 ## 2026-11-04 · Velocity rule fixed: hubs excluded, threshold 11 (chosen on a learning day)
 
 **Change.** The live velocity rule now skips the batch layer's hub accounts (more than `hub_degree` counterparties
-on the learning days; 190 accounts in HI-Small, published by the Q2 job to `analytics/serving/.../hubs/`), and its
+on the learning days; 190 accounts in HI-Small, published by the BQ2 job to `analytics/serving/.../hubs/`), and its
 threshold is 11 distinct payees in 24 h instead of 8.
 **How it was chosen.** On a replay of **7 Sep** (a learning day) with hubs excluded, the threshold where the
 velocity rule itself scores best (F1) was 11 — also the batch layer's own data-driven fan-out threshold.
@@ -23,7 +65,7 @@ it is kept for the schemes those rules cannot see yet.
 
 Live replay through Kafka after the fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer now skips
 rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
-inflate the alert precision on the Live tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
+inflate the alert precision on the Live monitor tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
 the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. The whole-day figure above
 (2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
 
@@ -53,7 +95,7 @@ The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run ins
 same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of a few hundred to a
 few thousand transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
 (1 Aug - 7 Oct), official grading on the rest (8 Oct - 5 Nov), tail reported separately.
-Resources: Glue with 10 G.1X workers (6 min), EMR 9 x m5.2xlarge (Q2 compute 159 s). Before the run the
+Resources: Glue with 10 G.1X workers (6 min), EMR 9 x m5.2xlarge (BQ2 compute 159 s). Before the run the
 watchlist-edges step was rewritten from an OR join (a nested loop: about 30 billion comparisons at this size) to two
 equi-joins, with identical output. Official top-1,000 precision 18.8 % against 4.7 % at random.
 
@@ -66,12 +108,12 @@ tags the default VPC and its subnets, and every cluster carries the tag `for-use
 file) and the official runs repeat there; because results are now identical run to run, every number above
 carries over. The Learner Lab copy is deleted afterwards.
 
-## 2026-11-04 · The Q2 time window stays at 3 days (evidence)
+## 2026-11-04 · The BQ2 time window stays at 3 days (evidence)
 
 Same HI-Small data, same cluster (3 × m5.xlarge), only `--window-days` changed. Learn on 1–7 Sep.
 Precision = share of the top-k holdout accounts that are laundering accounts (205,988 holdout accounts).
 
-| Window | Q2 compute | Path-join step | Same days, top 500 | Same days, top 1,000 | Next days (8–10 Sep), top 1,000 | Typology attempts detected |
+| Window | BQ2 compute | Path-join step | Same days, top 500 | Same days, top 1,000 | Next days (8–10 Sep), top 1,000 | Typology attempts detected |
 |---|---|---|---|---|---|---|
 | 1 day | 120.7 s | 9.5 s | 12.0 % | 8.7 % | 2.2 % | 142 / 370 |
 | **3 days** | 124.1 s | 11.3 s | **21.8 %** | **13.7 %** | 2.4 % | **163 / 370** |
@@ -85,31 +127,31 @@ crowd the list), while the path-join step costs 39 % more. So 3 days is where th
 The window barely changes next-days precision (all ≈5× random): predicting which accounts launder *next* is
 harder than spotting schemes already under way — reported honestly as the official figure.
 
-## 2026-11-04 · Q2 accounts are split on the 2nd-to-last character of the account id
+## 2026-11-04 · BQ2 accounts are split on the 2nd-to-last character of the account id
 
 **Finding.** The scorecard learns on "calibration" accounts and is graded on "holdout" accounts, split by
 the last hex character of the account id. On HI-Small, 483,675 account ids end in `0` and 13,317 in `1`,
 so the holdout "half" was only 11,649 accounts (3 %) — a small and unusual group. The 2nd-to-last
 character is evenly spread (≈31,000 accounts per hex digit), so the split now uses it.
 
-**Effect.** All Q2 accuracy figures from before this change are discarded.
+**Effect.** All BQ2 accuracy figures from before this change are discarded.
 
-## 2026-11-04 · Q2 heavy steps are checkpointed, not cached (tuning)
+## 2026-11-04 · BQ2 heavy steps are checkpointed, not cached (tuning)
 
-**Observe.** First HI-Small run on EMR (3 × m5.xlarge): the Q2 step took 44 min; the ranking step
+**Observe.** First HI-Small run on EMR (3 × m5.xlarge): the BQ2 step took 44 min; the ranking step
 alone took 670 s of 932 s of step time while doing little real work.
 **Hypothesise.** Each step's query plan carries every earlier step, so Spark spends its time re-planning
 and matching cached plans rather than computing. (Adding *more* caching made it slower, which supports this.)
 **Change one thing.** `--lineage checkpoint`: heavy steps are checkpointed to the cluster's HDFS, which
 saves the result and cuts the plan back to "read this saved table".
 **Measure.** Local SYN-Small, same code, only the switch changed: 593.5 s → 40.0 s, identical watchlist.
-EMR HI-Small figures: see the experiment results.
+On EMR (HI-Small, 3 × m5.xlarge) the BQ2 step went from 44 min to about 3.6 min, identical watchlist.
 
 A second finding on the way: the fan-in/fan-out thresholds used Spark's *approximate* percentile, which
 returned 9, 10 or 11 for the same data depending on layout and changed the watchlist between runs. They now
 use the exact percentile.
 
-## 2026-11-04 · Q2 accuracy is graded on 8–10 Sep (HI-Small)
+## 2026-11-04 · BQ2 accuracy is graded on 8–10 Sep (HI-Small)
 
 **Finding.** HI-Small spans 18 days, not 10. From 11 Sep onwards the simulator produces almost no normal
 activity — only the tails of laundering schemes that started earlier:
@@ -121,13 +163,13 @@ activity — only the tails of laundering schemes that started earlier:
 
 (Athena, `aml.transactions`, variant HI-Small, after Glue cleaning.)
 
-**Decision.** Q2 learns from **1–7 Sep** and is graded on **8–10 Sep** — the official figure.
+**Decision.** BQ2 learns from **1–7 Sep** and is graded on **8–10 Sep** — the official figure.
 Accuracy including 11–18 Sep is also computed and shown as a second figure, clearly labelled.
 
 **Why.** On 11–18 Sep almost every active account is laundering, so any method scores well there; the
 schemes also started inside the learning period, so the same accounts reappear. Grading on those days
 would overstate how well the watchlist works on a realistic day. The 11–18 Sep data is **not** deleted:
-it stays in S3, in Q1 and in detection — it is only left out of the official grade.
+it stays in S3, in BQ1 and in detection — it is only left out of the official grade.
 
 **Slide wording.** "Graded on 8–10 Sep, a realistic mix of days: X % precision. Including 11–18 Sep it
 rises to Y %, but those days are almost entirely laundering tails, so X is our honest figure."
@@ -141,10 +183,10 @@ external rate table is needed. Live rates were rejected: the transactions are si
 ## 2026-11-04 · Self-transfers are kept (for now)
 
 591,212 HI-Small rows (11.6 %) are an account paying itself; only 11 are laundering. They are kept in
-all figures and mentioned on the slides. Removing them would change every Q1 number, so it is a team
+all figures and mentioned on the slides. Removing them would change every BQ1 number, so it is a team
 decision.
 
-## 2026-11-04 · HI-Large is optional
+## 2026-11-04 · HI-Large is optional (superseded: HI-Large was run in full in the team account, see above)
 
 The pitch promised HI-Large (180M rows) but also asked the professor "HI-Large or HI-Medium?". The
 account has a US$50 budget, not US$250. Plan: HI-Medium is the guaranteed headline; one HI-Large attempt

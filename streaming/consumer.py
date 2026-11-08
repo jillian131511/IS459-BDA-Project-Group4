@@ -3,7 +3,7 @@ Kafka CONSUMER - real-time AML alerting (the 'speed layer').
 
 Loads the batch layer's outputs (Q2 watchlist, Q1 segment risk, FX rates) from the serving CSVs written by the
 EMR job, consumes `aml-transactions`, scores every event with streaming/monitor_core.py and writes alerts:
-  * locally  -> streaming/out/alerts.jsonl + stats.json   (the dashboard's Live tab tails these)
+  * locally  -> streaming/out/alerts.jsonl + stats.json   (the dashboard's Live monitor tab tails these)
   * to S3    -> s3://BUCKET/streaming/alerts/variant=<v>/  every --flush-secs (durable, queryable later)
 
   python streaming/consumer.py --bucket BUCKET --variant HI-Small --bootstrap localhost:9092

@@ -31,7 +31,7 @@ def amount_band(usd):
 
 class RiskModel:
     def __init__(self, watchlist_csv_text, segments_csv_text, min_probability=0.5, min_segment_lift=20.0,
-                 watchlist_segment_lift=2.0, velocity_k=8, velocity_window_secs=24 * 3600, hubs=()):
+                 watchlist_segment_lift=2.0, velocity_k=11, velocity_window_secs=24 * 3600, hubs=()):
         self.watch = {}
         for r in csv.DictReader(io.StringIO(watchlist_csv_text)):
             p = float(r["risk_probability"])
