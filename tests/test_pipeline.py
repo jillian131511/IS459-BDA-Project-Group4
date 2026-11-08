@@ -55,6 +55,9 @@ class Pipeline(unittest.TestCase):
         export = routes_export(scored)
         self.assertEqual(export.to_bank.tolist(), ["3", "2"])
         self.assertEqual(export.rank_by_risk.tolist(), [1, 2])
+        by_value = routes_export(scored, by="value")
+        self.assertEqual(by_value.laundered_usd.tolist(), [1e5, 100])                  # most laundered first
+        self.assertEqual(by_value.rank_by_risk.tolist(), [1, 2])                       # risk rank kept
 
     @classmethod
     def setUpClass(cls):

@@ -20,14 +20,17 @@ def route_risk(corridors):
     return data
 
 
-def routes_export(corridors):
-    """Bank-to-bank routes for download, ranked worst-to-first by the Wilson lower bound (ties: more transfers)."""
+def routes_export(corridors, by="risk"):
+    """Bank-to-bank routes for download. rank_by_risk is always the Wilson lower-bound rank (ties: more transfers);
+    by="value" orders the rows by laundered USD instead, to match the 'most laundered money' view."""
     data = corridors.sort_values(["wilson_lb", "n_txn"], ascending=[False, False], kind="stable").reset_index(drop=True)
     out = pd.DataFrame({"rank_by_risk": range(1, len(data) + 1), "from_bank": data.from_bank, "to_bank": data.to_bank,
                         "transfers": data.n_txn, "laundering_transfers": data.n_laundering,
                         "laundering_rate_pct": data.laundering_rate * 100, "lift": data.lift,
                         "lift_at_95pct_lower_bound": data.lb_lift, "total_usd": data.usd_volume,
                         "laundered_usd": data.laundered_usd})
+    if by == "value":
+        out = out.sort_values("laundered_usd", ascending=False, kind="stable").reset_index(drop=True)
     return out
 
 

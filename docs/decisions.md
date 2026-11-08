@@ -9,9 +9,9 @@ The per-bank route chart ranked routes by raw lift, so a route with 1 laundering
 500 in 50,000 (10x). It now ranks by the 95 % Wilson lower bound, the same rule as the monitoring rules (the
 proposal's "worst-to-first, held back until there's enough to be sure"); bars show that cautious lift, labels the
 raw lift. The heatmap picks banks by laundered value and colours cells by risk; its caption now says so and states
-the share of laundered value its cells carry (44 % on SYN-Small; the rest is reachable in the per-bank tab). A
-download of every qualifying route, ranked the same way, sits under the section heading, and clicking a heatmap
-cell switches to that bank's route chart.
+the share of laundered value its cells carry (44 % on SYN-Small; the rest is reachable in the per-bank tab). Each
+route view has a CSV button below it, like the other heatmaps (the grid's routes, one bank's routes, all routes),
+and clicking a heatmap cell switches to that bank's route chart.
 
 ## 2026-11-08 · Checked against the Week 9 proposal: bank-route heatmap added, full 1,000-account watchlist
 
