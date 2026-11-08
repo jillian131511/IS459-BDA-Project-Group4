@@ -4,24 +4,30 @@ Lecture references point to the IS459 decks in the Project knowledge base, as *W
 
 ## 1. Business questions
 
-**Q1 · Where should the AML monitoring team spend its limited review capacity?**
+**BQ1 · Where should the AML monitoring team spend its limited review capacity?**
 * Beneficiary: transaction-monitoring analysts and the Head of AML Compliance, who set rules and alert volumes.
 * Pain point: analyst hours are fixed; static thresholds flood queues with innocent alerts.
 * Analysis: laundering rate, lift and 95 % Wilson lower bound per segment (payment format × payment currency ×
   cross-bank × cross-currency × amount band in USD); capture curve (share of transactions reviewed vs share of
   laundering caught when segments are monitored in risk order); time-of-week profile; bank-to-bank corridors.
-* Output: alert-budget optimiser ("we can review X % of transfers, which rules catch the most?").
+* Output: alert-budget optimiser ("we can review X % of transfers, which rules catch the most?"). The dashboard
+  lists **every** segment that fits inside the chosen budget, in risk order, under a header that states the count
+  (e.g. "Monitoring rules at this budget · 76 segments"), so the rule set to deploy is complete, not a top-N excerpt.
+  Heatmaps show lift by payment format × currency, by day × hour, and by bank-to-bank route (the 20 banks sending
+  × the 20 receiving the most laundered value; click a cell to drill into that sender's routes).
 
-**Q2 · Which accounts are moving the money, and why do we think so?**
+**BQ2 · Which accounts form laundering networks, and why?**
 * Beneficiary: financial-crime investigators deciding which accounts to escalate.
 * Pain point: single-transaction rules miss multi-hop schemes; unexplained alerts are slow to triage.
 * Analysis: time-respecting graph motifs over the full transaction graph - daily fan-out / fan-in, 2-, 3- and
-  4-hop cycles closing within a window, scatter-gather (>= 3 mules), gather-scatter; combined with the Q1 segment
+  4-hop cycles closing within a window, scatter-gather (>= 3 mules), gather-scatter; combined with the BQ1 segment
   risk of each account's transactions in a weight-of-evidence (WoE) scorecard.
-* Output: top-1,000 watchlist with risk probability and plain-English reasons; money-trail explorer.
+* Output: top-1,000 watchlist (all 1,000 in the dashboard table) with risk probability and plain-English reasons; money-trail explorer (click a
+  watchlist row or any top-300 account on the graph to open its trail; other accounts explain why they cannot be
+  opened).
 
-The two questions are distinct: Q1 is about **channels** (where to look), Q2 about **entities and networks** (who
-to investigate). Q2 re-uses Q1's output as one of its signals, which the evaluation shows is worth doing.
+The two questions are distinct: BQ1 is about **channels** (where to look), BQ2 about **entities and networks** (who
+to investigate). BQ2 re-uses BQ1's output as one of its signals, which the evaluation shows is worth doing.
 
 ## 2. Data assessment (5 Vs - Week 3 slides 5-16)
 
@@ -33,9 +39,9 @@ to investigate). Q2 re-uses Q1's output as one of its signals, which the evaluat
 | Veracity | Header repeats `Account`; mixed currencies; labels are synthetic | Explicit schema at read time; DQ report (rows in / dropped / without FX); USD via rates implied by the data |
 | Value | Labels + typologies available | We can *measure* precision and typology coverage, not just claim them |
 
-**Assumptions to verify on the real files (flagged, not guessed):** timestamp format `yyyy/MM/dd HH:mm`; bank ids may
-be zero-padded in the Patterns file; enough USD-paired cross-currency transfers exist to imply each currency's
-rate (rows without a rate are counted in `dq_report.rows_without_fx_rate`; if non-zero, add an external FX table).
+**Assumptions checked on the real files:** timestamp format `yyyy/MM/dd HH:mm`; bank ids zero-padded in the
+Patterns file (normalised on read); enough USD-paired cross-currency transfers to imply every currency's rate:
+`dq_report.rows_without_fx_rate` = 0 on HI-Small and HI-Large, so no external FX table is needed (`decisions.md`).
 
 ## 3. Architecture decisions and trade-offs
 
@@ -45,8 +51,8 @@ rate (rows without a rate are counted in `dq_report.rows_without_fx_rate`; if no
 | Glue ETL for preparation | EMR for everything | Serverless, no cluster to manage for a linear ETL | W4 s42; W6 s33 |
 | Parquet, Snappy, partitioned by variant/date | Keep CSV | Columnar + partition pruning = fewer bytes scanned = cheaper/faster Athena (measured by our benchmark) | W2 s70-73; W5 s36 |
 | Glue crawler for curated tables; DDL + partition projection for analytics tables | Crawl everything | Crawler mirrors the lab; projection needs no re-crawl for new variants | W4 Glue lab; W5 s39 |
-| Athena for Q1 | Redshift | Serverless SQL, pay per scan; brief asks to avoid Redshift | W5 s36 |
-| EMR (transient) for Q2 | Glue, Athena | Multi-hop self-joins are iterative and memory-heavy; Spark caches intermediates; EMR gives control of size | W6 s28, s33-37 |
+| Athena for BQ1 | Redshift | Serverless SQL, pay per scan; brief asks to avoid Redshift | W5 s36 |
+| EMR (transient) for BQ2 | Glue, Athena | Multi-hop self-joins are iterative and memory-heavy; Spark caches intermediates; EMR gives control of size | W6 s28, s33-37 |
 | Step Functions | Manual runs, Airflow (MWAA) | Native Glue/EMR/Athena integrations, cheap, retries, guaranteed EMR termination | W4 s38 |
 | Kafka on EC2 | Kinesis, MSK | Taught in W7; partitions keyed by sender keep per-account order for the velocity window | W7 s23-24 |
 | Streamlit + boto3 → Athena | QuickSight | Brief asks to avoid QuickSight; lab pattern; only small aggregates leave Athena | W5 s37 |
@@ -60,7 +66,7 @@ stream can evaluate in time.
 partitions; Step Functions retries Glue concurrency errors and always terminates EMR; Kafka can scale consumers
 up to the number of partitions (3).
 
-## 4. Q2 method details
+## 4. BQ2 method details
 
 * Hub accounts (total degree above the 99.9th percentile, min 50) are excluded from path joins - they are
   merchants/payroll-like and would explode the joins - but still get fan-in/fan-out statistics.
@@ -72,18 +78,24 @@ up to the number of partitions (3).
   of layering). On the synthetic test data this lifted cycle-flag precision from 5 % to 39 %.
 * Cycles must close within 2x / 3x the 3-day window for 3- / 4-hop cycles.
 * Scorecard: `logit = prior + sum(WoE(flag value))`, `WoE = ln(P(value | laundering account) / P(value | normal account))`
-  with +0.5 smoothing, learned on calibration accounts only (even last hex digit of the account id).
+  with +0.5 smoothing, learned on calibration accounts only (even 2nd-to-last hex character of the account id; the last character is
+  heavily skewed, see `decisions.md`).
   `risk_probability = 1 / (1 + e^-logit)`.
 * Evaluation on holdout accounts: precision@k for k in {50 ... 2,500} for combined, network-only, segment-only and
   random; typology coverage of the top-k watchlist using the Patterns file.
+* Official grade (time-based): accounts are scored from the learning days only (`train_until`), then graded on
+  whether they launder on the following normal days (`test_until`); the tail days, almost all laundering, are
+  reported separately. "Random" is the share of holdout accounts that launder in the same period, i.e. the
+  expected result of picking accounts blindly.
 * Limitations: naive-Bayes-style WoE double-counts correlated flags (ranking still valid, probabilities optimistic);
   cycles longer than 4 hops are not enumerated (cost grows exponentially); labels are synthetic.
 
 ## 5. Streaming rules (speed layer)
 
-1. Watchlist: sender or receiver on the Q2 watchlist with probability >= 0.5 **and** the transaction is in a segment
+1. Watchlist: sender or receiver on the BQ2 watchlist with probability >= 0.5 **and** the transaction is in a segment
    with lift >= 2 (prevents a watchlisted account's ordinary payments flooding the queue).
 2. Hot segment: segment lift >= 20 with Wilson lower bound > 0.
-3. Velocity: sender has paid >= 8 distinct accounts within the last 24 h of event time.
+3. Velocity: sender has paid >= 11 distinct accounts within the last 24 h of event time; the batch layer's hub
+   accounts (merchants, payroll) are excluded. Threshold chosen on a learning-day replay (`decisions.md`, 4 Nov).
 
 The consumer reports alert rate, alert precision (from labels, for the demo only) and p50/p95 latency.
