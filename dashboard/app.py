@@ -419,8 +419,8 @@ with tab_overview:
                         pct(k100.precision_combined),
                         f"{k100.precision_combined / max(k100.base_rate, 1e-9):.0f}x better than random",
                         delta_color="normal",
-                        help="Flagged using only the learning days, graded on the following days, on the half of the "
-                             "accounts whose labels were never used to build the scorecard.")
+                        help="Flagged using only the learning days, graded on the following days, on the other half of the "
+                             "accounts, not the half whose labels set the red-flag points.")
             c[2].metric("Graded accounts that launder later",
                         f"{int(k100.n_holdout_bad):,} of {int(k100.n_holdout_accounts):,}",
                         f"{pct(k100.base_rate)} = picking at random", delta_color="off")
@@ -672,7 +672,7 @@ with tab_q2:
                   ("precision_network_only", "Network motifs only"),
                   ("precision_segment_only", "Channel rules only (BQ1)"),
                   ("base_rate", "Random selection")]
-        HALF = {"holdout": "graded (labels never used)", "calibration": "learning (labels set the points)"}
+        HALF = {"holdout": "graded (held-out half)", "calibration": "learning (labels set the points)"}
         has_split = "split" in wl.columns
         with st.container(border=True):
             st.subheader("Investigator watchlist")
@@ -685,7 +685,7 @@ with tab_q2:
                       | wl.reasons.fillna("").str.contains(q, case=False, regex=False)] if q else wl
             with f2:
                 st.write("")
-                graded_only = has_split and st.toggle("Only the graded half (accounts whose labels were never used)",
+                graded_only = has_split and st.toggle("Only the graded half (held-out accounts)",
                                                       value=False)
             if graded_only:
                 view = view[view["split"] == "holdout"]
@@ -986,7 +986,7 @@ with tab_q2:
                     st.markdown(f"**Why {me} was flagged**\n\n{bullets}")
                     if has_split:
                         st.markdown("**Account half:** " + (
-                            "graded. Its own labels were never used to build the scorecard."
+                            "graded. Its red-flag points were learned from the other half of the accounts."
                             if row["split"] == "holdout" else
                             "learning. Its labels helped set the points per red flag; its score still comes only "
                             "from its own money-flow patterns."))
@@ -1028,7 +1028,7 @@ with tab_q2:
             e = ev.sort_values("k")
             with st.expander("Supporting test: same days (schemes already under way)", expanded=official.empty):
                 show(precision_chart(e, series, "<b>Same days</b>: precision of the top-k watchlist on the graded "
-                                                "half (labels never used)", "truly involved in laundering"))
+                                                "half (held-out accounts)", "truly involved in laundering"))
                 st.caption("Spotting schemes that are already running is easier than predicting who launders next, "
                            "so this figure is higher than the official one above.")
         sp = load("q2_signal_precision", variant)
