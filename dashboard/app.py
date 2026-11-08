@@ -487,8 +487,11 @@ with tab_q1:
             route_chart_key = f"corridor_chart_{variant}"
             route_notice_key = f"corridor_notice_{variant}"
             heat_key = f"corridor_heatmap_{variant}"
-            t_heat, t_risk, t_value = st.tabs(["Heatmap: route risk between the busiest banks",
-                                               "Riskiest routes from one bank", "Routes moving the most laundered money"])
+            ROUTE_TABS = ["Heatmap: route risk between the busiest banks", "Riskiest routes from one bank",
+                          "Routes moving the most laundered money"]
+            tabs_key = f"corridor_tabs_{variant}"
+            # keyed tabs (Streamlit 1.65+) remember the open tab, so a heatmap click can switch to the route chart
+            t_heat, t_risk, t_value = st.tabs(ROUTE_TABS, key=tabs_key, on_change="rerun")
             with t_heat:
                 # sender x receiver lift for the 20 banks sending / receiving the most laundered value; a full
                 # bank-by-bank matrix would be thousands wide on HI-Large and almost entirely empty
@@ -505,8 +508,8 @@ with tab_q1:
                     if bank is not None:
                         if bank in sent.index:
                             st.session_state[sender_key] = bank
-                            st.session_state[route_notice_key] = (
-                                f"Bank {bank} is now selected in the 'Riskiest routes from one bank' tab.")
+                            st.session_state[tabs_key] = ROUTE_TABS[1]
+                            st.session_state[route_notice_key] = f"Showing the riskiest routes from bank {bank}."
 
                 if cells.empty:
                     st.info("None of the busiest banks share a qualifying route.")
@@ -520,7 +523,7 @@ with tab_q1:
                     # cell carries the sender bank (and the hover text, so hovering still shows the route)
                     fig.add_trace(go.Scatter(
                         x=[f"to {b}" for b in cells.to_bank], y=[f"from bank {b}" for b in cells.from_bank],
-                        mode="markers", marker=dict(symbol="square", size=18, color="rgba(0,0,0,0)"),
+                        mode="markers", marker=dict(symbol="square", size=24, color="rgba(0,0,0,0)"),
                         customdata=cells.from_bank.tolist(), showlegend=False, hoverinfo="text",
                         hovertext=[f"Bank {r.from_bank} → bank {r.to_bank}<br>lift {r.lift:.1f}x<br>"
                                    f"{int(r.n_txn):,} transfers, {int(r.n_laundering):,} laundering<br>"
@@ -532,7 +535,7 @@ with tab_q1:
                     st.caption(f"Rows: the {len(top_s)} banks sending the most laundered value; columns: the "
                                f"{len(top_r)} receiving the most. Each cell is one route's lift; numbers mark 10x or "
                                "more. Blank means that route is below the bar above, not that no money moved. Click a "
-                               "cell to pick its sender bank in the next tab.")
+                               "cell to see all routes from its sender bank.")
             with t_risk:
 
                 def open_receiver_as_sender():

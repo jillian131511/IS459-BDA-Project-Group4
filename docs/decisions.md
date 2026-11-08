@@ -30,7 +30,7 @@ evidence ("How the watchlist is scored and graded"), captioned as unaffected by 
 Clicking a node in the money-trail graph, or a row in the watchlist table, opens that account's trail, as long as
 it is in the top 300 (the accounts with published trails) and matches the watchlist search and graded-half filter;
 otherwise a note says why and the selection stays. Graph clicks are ported from the `dashboard-bq1-heatmaps` branch.
-Needs Streamlit 1.49+ (chart and table selection events).
+Needs Streamlit 1.65+ (chart and table selection events; keyed tabs so a heatmap click opens the route chart).
 
 Two bugs fixed on the way, both when the graded-half filter removes the selected account: the dropdown kept showing
 the old account while the graph moved on (the picker is now set explicitly), and the table's tick stayed on the

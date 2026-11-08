@@ -31,7 +31,7 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 
 ### 0  Test locally (no AWS, ~1 minute)
 ```bash
-pip install -r requirements.txt             # streamlit>=1.49 is needed for the dashboard's click-through
+pip install -r requirements.txt             # streamlit>=1.65 is needed for the dashboard's click-through
 python -m unittest tests/test_pipeline.py -v
 python local/make_synthetic_data.py --out data/raw --variant SYN-Small
 python local/etl_local.py --trans data/raw/SYN-Small_Trans.csv --patterns data/raw/SYN-Small_Patterns.txt --variant SYN-Small
