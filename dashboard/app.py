@@ -215,13 +215,35 @@ LABEL_SIDES = ["middle right", "top right", "top center", "top left",
                "middle left", "bottom left", "bottom center", "bottom right"]
 
 
-def place_labels(items, obstacles, to_px, gap=3):
+def _segment_hits_box(seg, b):
+    """True if the pixel segment ((x0, y0), (x1, y1)) passes through box b = (x0, y0, x1, y1) (Liang-Barsky)."""
+    (x0, y0), (x1, y1) = seg
+    dx, dy = x1 - x0, y1 - y0
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x0 - b[0]), (dx, b[2] - x0), (-dy, y0 - b[1]), (dy, b[3] - y0)):
+        if p == 0:
+            if q < 0:
+                return False
+        else:
+            t = q / p
+            if p < 0:
+                t0 = max(t0, t)
+            else:
+                t1 = min(t1, t)
+            if t0 > t1:
+                return False
+    return True
+
+
+def place_labels(items, obstacles, to_px, gap=3, segments=()):
     """Greedy label placement without overlaps, in pixels.
 
     items: (node, (x, y), marker_radius_px, font_size, preferred_side, [text, shorter fallback, ...]) in priority
     order. obstacles: pixel boxes (x0, y0, x1, y1) that labels must avoid (markers, the 'selected' chip).
-    Each label tries its texts in turn and, for each, the 8 positions around its dot starting with the preferred
-    (outward) side; the first spot that hits nothing wins. Returns {node: (textposition, text)}, text '' = hidden."""
+    segments: (weight, ((x0, y0), (x1, y1))) pixel lines (the arrows) that labels should avoid where they can.
+    Each label tries its texts in turn and, for each, the 8 positions around its dot; a spot may not hit a box,
+    and among the free spots the one crossing the fewest (weighted) arrows wins, ties going to the preferred
+    (outward) side. Returns {node: (side, text)}, text '' = hidden."""
     import re as _re
     taken = list(obstacles)
 
@@ -234,6 +256,9 @@ def place_labels(items, obstacles, to_px, gap=3):
     def hits(b, pool):
         return any(b[0] < o[2] + gap and o[0] < b[2] + gap and b[1] < o[3] + gap and o[1] < b[3] + gap for o in pool)
 
+    def crossings(b):
+        return sum(wt for wt, seg in segments if _segment_hits_box(seg, b))
+
     out = {}
     for node, (x, y), r, size, pref, texts in items:
         px, py = to_px(x, y)
@@ -244,13 +269,28 @@ def place_labels(items, obstacles, to_px, gap=3):
         for text in texts:
             others = [o for o in taken if o != own]        # a label may touch its own dot, nothing else
             lines = [_re.sub(r"<[^>]+>", "", s) for s in text.split("<br>")]
-            w, h = max(len(s) for s in lines) * size * 0.58, len(lines) * size * 1.25
-            spot = next((s for s in order if not hits(box(px, py, r, w, h, s), others)), None)
-            if spot:
+            w, h = max(len(s) for s in lines) * size * 0.58 + 4, len(lines) * size * 1.25 + 2
+            free = [(crossings(box(px, py, r, w, h, s)), k, s) for k, s in enumerate(order)
+                    if not hits(box(px, py, r, w, h, s), others)]
+            if free:
+                spot = min(free)[2]
                 taken.append(box(px, py, r, w, h, spot))
                 out[node] = (spot, text)
                 break
     return out
+
+
+def label_annotation(x, y, side, text, r, size, colour, bg):
+    """A node label as a plotly annotation at the spot place_labels chose: same offsets as its pixel box, with a
+    light background so an arrow that still has to pass under the label does not strike through the text."""
+    v, hz = side.split()
+    return dict(x=x, y=y, xref="x", yref="y", showarrow=False, text=text,
+                xanchor={"right": "left", "left": "right"}.get(hz, "center"),
+                yanchor={"top": "bottom", "bottom": "top"}.get(v, "middle"),
+                xshift=(r + 2) if hz == "right" else -(r + 2) if hz == "left" else 0,
+                yshift=(r + 2) if v == "top" else -(r + 2) if v == "bottom" else 0,
+                align={"right": "left", "left": "right"}.get(hz, "center"),
+                font=dict(size=size, color=colour), bgcolor=bg, borderpad=1)
 
 
 def flag_tags(r, limit: int = 3) -> str:
@@ -843,7 +883,10 @@ with tab_q2:
                     obstacles.append((cx - chip_w / 2, cy - 26 - 13, cx + chip_w / 2, cy - 26 + 13))
                 items = [(n, pos[n], radius[n], 12, side(n), [label(n), f"<b>#{int(rank[n]):,}</b>"])
                          for n in inner if label(n)] +                         [(n, pos[n], radius[n], 11, side(n), [label(n)]) for n in outer if label(n)]
-                placed = place_labels(items, obstacles, to_px)
+                # arrows as pixel segments: the selected account's own flows weigh more, so labels sit over the
+                # faint between-counterparty lines before they sit over a bold arrow
+                segments = [(3 if acct in (u, v) else 1, (to_px(*pos[u]), to_px(*pos[v]))) for u, v in g.edges]
+                placed = place_labels(items, obstacles, to_px, segments=segments)
                 hidden = sum(1 for n, _, _, _, _, t in items if placed[n][1] != t[0])
                 lab = lambda n: placed[n][1] if n in placed else ""
                 where = lambda n: placed[n][0] if n in placed else side(n)
@@ -859,13 +902,11 @@ with tab_q2:
                     + [go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=14, color="rgba(0,0,0,0)"),
                                   text=mtext, hoverinfo="text", showlegend=False)]
                     + [go.Scatter(x=[pos[n][0] for n in unflagged], y=[pos[n][1] for n in unflagged],
-                                  customdata=unflagged, mode="markers+text", showlegend=False,
+                                  customdata=unflagged, mode="markers", showlegend=False,
                                   marker=dict(size=10, color=T["unflagged"], line=dict(width=2, color=T["surface"])),
-                                  text=[lab(n) for n in unflagged], textposition=[where(n) for n in unflagged],
-                                  textfont=dict(size=11, color=T["ink2"]),
                                   hovertext=[hover(n) for n in unflagged], hoverinfo="text")]
                     + [go.Scatter(x=[pos[n][0] for n in flagged], y=[pos[n][1] for n in flagged],
-                                  customdata=flagged, mode="markers+text", showlegend=False,
+                                  customdata=flagged, mode="markers", showlegend=False,
                                   marker=dict(size=[26 if n == acct else 13 for n in flagged],
                                               color=[risk[n] for n in flagged], colorscale=T["risk"], cmin=0, cmax=1,
                                               line=dict(width=[2.5 if n == acct else 2 for n in flagged],
@@ -874,9 +915,11 @@ with tab_q2:
                                                                        font=dict(color=T["muted"], size=12)),
                                                             tickfont=dict(color=T["ink2"]), outlinewidth=0,
                                                             thickness=10, len=0.6, y=0.4)),
-                                  text=[lab(n) for n in flagged], textposition=[where(n) for n in flagged],
-                                  textfont=dict(size=12, color=T["ink"]),
                                   hovertext=[hover(n) for n in flagged], hoverinfo="text")])
+                label_bg = rgba(T["surface"], 0.85)
+                arrows += [label_annotation(*pos[n], where(n), lab(n), radius[n], 12 if n in risk else 11,
+                                            T["ink"] if n in risk else T["ink2"], label_bg)
+                           for n in nodes if lab(n)]
                 if labels_on in ("Flagged accounts", "All accounts"):
                     arrows.append(dict(x=pos[acct][0], y=pos[acct][1], xref="x", yref="y", showarrow=False, yshift=26,
                                        text=f"<b>{me}</b> selected", font=dict(size=13, color=T["ink"]),
