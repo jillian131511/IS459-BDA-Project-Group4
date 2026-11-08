@@ -1,6 +1,6 @@
 """
 End-to-end local test: synthetic data -> ETL -> Q1 SQL -> Q2 SQL -> streaming monitor -> dashboard (stubbed UI).
-Run: python -m unittest tests/test_pipeline.py -v      (~1 minute, no AWS, no Spark needed)
+Run: python -m unittest discover -s tests -p test_pipeline.py -v      (~1 minute, no AWS, no Spark needed)
 """
 import json
 import os
@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.join(ROOT, "glue"))
 sys.path.insert(0, os.path.join(ROOT, "streaming"))
 from patterns_parser import parse_patterns_text  # noqa: E402
 from monitor_core import RiskModel, amount_band  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "dashboard"))
+from presentation import corridor_preview, ranked_lift_data  # noqa: E402
 
 
 def sh(*args):
@@ -24,6 +26,20 @@ def sh(*args):
 
 
 class Pipeline(unittest.TestCase):
+    def test_corridor_preview_and_ranked_export(self):
+        data = pd.DataFrame({"from_bank": [1, 1, 2, 1], "to_bank": [2, 3, 1, 4],
+                             "laundered_usd": [100, 10, 1, 5], "lift": [5, 20, 3, 2],
+                             "n_txn": [1000, 50, 200, 100]})
+        routes, total = corridor_preview(data, sender="1", max_routes=2)
+        self.assertEqual(total, 3)
+        self.assertEqual(routes.from_bank.tolist(), ["1", "1"])
+        self.assertEqual(routes.to_bank.tolist(), ["3", "2"])          # direction kept, highest lift first
+        self.assertEqual(len(data), 4)                                  # the source table is not modified
+        exported = ranked_lift_data(data.assign(n_laundering=5, laundering_rate=0.1), ["from_bank", "to_bank"])
+        self.assertEqual(exported.lift.tolist(), [20, 5, 3, 2])
+        self.assertEqual(exported.rank_by_lift.tolist(), [1, 2, 3, 4])
+        self.assertTrue((exported.laundering_rate_pct == 10).all())
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp()
@@ -85,6 +101,20 @@ class Pipeline(unittest.TestCase):
         # the wider period can only contain the same or more laundering accounts
         self.assertTrue((tail.n_holdout_bad >= off.n_holdout_bad).all())
 
+    def test_watchlist_trail_coverage(self):
+        """Money trails stay bounded to the top-300 accounts, 40 flows each, and include each one's largest flows."""
+        w = pd.read_csv(f"{self.ana}/q2_watchlist.csv")
+        tx = pd.read_csv(f"{self.cur}/transactions.csv")
+        pairs = tx[tx.is_self == 0].groupby(["src_id", "dst_id"]).amount_usd.sum()
+        published = pd.read_csv(f"{self.ana}/q2_watchlist_edges.csv")
+        actual = set(zip(published.src_id, published.dst_id))
+        self.assertLessEqual(len(published), 300 * 40)
+        for acct in w[w.risk_rank <= 300].acct:
+            incident = pairs[(pairs.index.get_level_values(0) == acct) | (pairs.index.get_level_values(1) == acct)]
+            cutoff = incident.nlargest(40).min()             # tied boundary amounts may pick either edge
+            self.assertTrue(set(incident[incident > cutoff].index) <= actual, acct)
+            self.assertTrue(any(acct in edge for edge in actual), acct)
+
     def test_streaming_rules(self):
         wl = "acct,risk_rank,risk_probability,reasons\n1:A,1,0.9,Part of 1 money cycle\n"
         seg = ("payment_format,payment_currency,is_cross_bank,is_cross_currency,amount_band,lift,wilson_lb\n"
@@ -109,7 +139,17 @@ class Pipeline(unittest.TestCase):
         sys.path.insert(0, os.path.join(ROOT, "tests", "stubs"))
         import make_stubs  # noqa: F401
         os.environ["LOCAL_DIR"] = self.ana
-        runpy.run_path(os.path.join(ROOT, "dashboard", "app.py"), run_name="__main__")
+        app = runpy.run_path(os.path.join(ROOT, "dashboard", "app.py"), run_name="__main__")
+        import streamlit as st
+        # BQ1 bank routes: clicking a receiver that also sends opens it as the sender; anything else only explains
+        receiver = app["senders"][-1]
+        st.session_state[app["route_chart_key"]] = {"selection": {"points": [{"customdata": receiver}]}}
+        app["open_receiver_as_sender"]()
+        self.assertEqual(st.session_state[app["sender_key"]], receiver)
+        st.session_state[app["route_chart_key"]] = {"selection": {"points": [{"customdata": "no-such-bank"}]}}
+        app["open_receiver_as_sender"]()
+        self.assertEqual(st.session_state[app["sender_key"]], receiver)
+        self.assertIn("nothing to open", st.session_state[app["route_notice_key"]])
 
     def test_sql_templates_render(self):
         sys.path.insert(0, os.path.join(ROOT, "emr"))

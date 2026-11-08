@@ -22,6 +22,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from architecture import architecture_svg  # noqa: E402  (theme-aware pipeline diagram)
+from presentation import corridor_preview, ranked_lift_data  # noqa: E402
 
 MODE = os.environ.get("DATA_MODE", "local")
 BUCKET = os.environ.get("BUCKET", "")
@@ -99,6 +100,12 @@ def load_alerts(variant: str):
 
 def pct(x, d=1):
     return f"{100 * float(x):.{d}f}%"
+
+
+def csv_button(df: pd.DataFrame, label: str, filename: str, help: str = None, where=None):
+    """One small download button; the file name doubles as the widget key so labels can repeat."""
+    (where or st).download_button(label, df.to_csv(index=False).encode("utf-8"), file_name=filename,
+                                  mime="text/csv", key=f"download_{filename}", help=help)
 
 
 # ----------------------------------------------------------------------------------------------- chart style
@@ -202,6 +209,48 @@ def money(x) -> str:
 def money_md(x) -> str:
     """money() for Streamlit markdown, where two '$' signs would otherwise start a maths formula."""
     return money(x).replace("$", r"\$")
+
+
+LABEL_SIDES = ["middle right", "top right", "top center", "top left",
+               "middle left", "bottom left", "bottom center", "bottom right"]
+
+
+def place_labels(items, obstacles, to_px, gap=3):
+    """Greedy label placement without overlaps, in pixels.
+
+    items: (node, (x, y), marker_radius_px, font_size, preferred_side, [text, shorter fallback, ...]) in priority
+    order. obstacles: pixel boxes (x0, y0, x1, y1) that labels must avoid (markers, the 'selected' chip).
+    Each label tries its texts in turn and, for each, the 8 positions around its dot starting with the preferred
+    (outward) side; the first spot that hits nothing wins. Returns {node: (textposition, text)}, text '' = hidden."""
+    import re as _re
+    taken = list(obstacles)
+
+    def box(px, py, r, w, h, side):
+        v, hz = side.split()
+        x0 = px - w / 2 if hz == "center" else px + r + 2 if hz == "right" else px - r - 2 - w
+        y0 = py - h / 2 if v == "middle" else py - r - 2 - h if v == "top" else py + r + 2
+        return (x0, y0, x0 + w, y0 + h)
+
+    def hits(b, pool):
+        return any(b[0] < o[2] + gap and o[0] < b[2] + gap and b[1] < o[3] + gap and o[1] < b[3] + gap for o in pool)
+
+    out = {}
+    for node, (x, y), r, size, pref, texts in items:
+        px, py = to_px(x, y)
+        own = (px - r, py - r, px + r, py + r)
+        i0 = LABEL_SIDES.index(pref) if pref in LABEL_SIDES else 0
+        order = [LABEL_SIDES[(i0 + d) % 8] for d in (0, 1, -1, 2, -2, 3, -3, 4)]
+        out[node] = (pref, "")
+        for text in texts:
+            others = [o for o in taken if o != own]        # a label may touch its own dot, nothing else
+            lines = [_re.sub(r"<[^>]+>", "", s) for s in text.split("<br>")]
+            w, h = max(len(s) for s in lines) * size * 0.58, len(lines) * size * 1.25
+            spot = next((s for s in order if not hits(box(px, py, r, w, h, s), others)), None)
+            if spot:
+                taken.append(box(px, py, r, w, h, spot))
+                out[node] = (spot, text)
+                break
+    return out
 
 
 def flag_tags(r, limit: int = 3) -> str:
@@ -347,50 +396,56 @@ with tab_q1:
         st.info("Run the pipeline to populate BQ1 results.")
     else:
         seg = seg.sort_values("risk_rank")
-        st.subheader("Alert-budget optimiser")
-        budget = st.slider("Share of all transactions your team can review", 0.5, 20.0, 5.0, 0.5,
-                           format="%.1f%%") / 100
-        chosen = seg[seg.cum_txn_share <= budget]
-        caught = chosen.cum_laundering_share.max() if not chosen.empty else 0.0
-        c = st.columns(3)
-        c[0].metric("Laundering transactions caught", pct(caught))
-        c[1].metric("Segments to monitor", f"{len(chosen):,}")
-        c[2].metric("Efficiency vs. random review", f"{caught / budget:.1f}x" if budget else "-")
-        curve = pd.concat([pd.DataFrame({"cum_txn_share": [0.0], "cum_laundering_share": [0.0]}),
-                           seg[["cum_txn_share", "cum_laundering_share"]]])
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=[0, 100], y=[0, 100], mode="lines", name="Random review",
-                                 line=dict(color=T["muted"], width=1.5), hoverinfo="skip"))
-        fig.add_trace(go.Scatter(x=curve.cum_txn_share * 100, y=curve.cum_laundering_share * 100, mode="lines",
-                                 name="Risk-ranked review", line=dict(color=T["s1"], width=2.5),
-                                 fill="tozeroy", fillcolor=rgba(T["s1"], 0.10),
-                                 hovertemplate="Review %{x:.1f}% of transfers<br>catch %{y:.1f}% of laundering"
-                                               "<extra></extra>"))
-        fig.add_vline(x=budget * 100, line=dict(color=T["muted"], width=1))
-        used = float(chosen.cum_txn_share.max()) if not chosen.empty else 0.0
-        fig.add_trace(go.Scatter(x=[used * 100], y=[caught * 100], mode="markers+text", showlegend=False,
-                                 marker=dict(size=12, color=T["s1"], line=dict(width=2, color=T["surface"])),
-                                 text=[f"<b>{caught * 100:.0f}% caught</b> by reviewing {used * 100:.1f}%"],
-                                 textposition="middle right", textfont=dict(size=14, color=T["ink"]),
-                                 hoverinfo="skip"))
-        fig.update_xaxes(title="share of transfers reviewed", range=[0, 30], ticksuffix="%")
-        fig.update_yaxes(title="share of laundering caught", range=[0, 102], ticksuffix="%")
-        show(style(fig, height=400))
-        st.markdown("**Monitoring rules to deploy at this budget** (ranked by the 95% Wilson lower bound of the "
-                    "laundering rate, so small lucky segments cannot top the list):")
-        rules = chosen.head(25).assign(
-            corridor=lambda d: d.is_cross_bank.map({1: "cross-bank", 0: "same bank"}),
-            fx=lambda d: d.is_cross_currency.map({1: "cross-currency", 0: "same currency"}),
-            rate=lambda d: (d.laundering_rate * 100).round(2), lift=lambda d: d.lift.round(1))
-        st.dataframe(rules[["risk_rank", "payment_format", "payment_currency", "corridor", "fx", "amount_band",
-                            "n_txn", "n_laundering", "rate", "lift"]], hide_index=True, width="stretch",
-                     column_config={"rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
-                                    "lift": st.column_config.NumberColumn("lift", format="%.1fx"),
-                                    "risk_rank": st.column_config.NumberColumn("rank"),
-                                    "payment_format": "payment", "payment_currency": "currency",
-                                    "amount_band": "amount (USD)",
-                                    "n_txn": st.column_config.NumberColumn("transfers", format="%d"),
-                                    "n_laundering": st.column_config.NumberColumn("laundering", format="%d")})
+        with st.container(border=True):
+            st.subheader("Alert-budget optimiser")
+            budget = st.slider("Share of all transactions your team can review", 0.5, 20.0, 5.0, 0.5,
+                               format="%.1f%%") / 100
+            chosen = seg[seg.cum_txn_share <= budget]
+            caught = chosen.cum_laundering_share.max() if not chosen.empty else 0.0
+            c = st.columns(3)
+            c[0].metric("Laundering transactions caught", pct(caught))
+            c[1].metric("Segments to monitor", f"{len(chosen):,}")
+            c[2].metric("Efficiency vs. random review", f"{caught / budget:.1f}x" if budget else "-")
+            curve = pd.concat([pd.DataFrame({"cum_txn_share": [0.0], "cum_laundering_share": [0.0]}),
+                               seg[["cum_txn_share", "cum_laundering_share"]]])
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=[0, 100], y=[0, 100], mode="lines", name="Random review",
+                                     line=dict(color=T["muted"], width=1.5), hoverinfo="skip"))
+            fig.add_trace(go.Scatter(x=curve.cum_txn_share * 100, y=curve.cum_laundering_share * 100, mode="lines",
+                                     name="Risk-ranked review", line=dict(color=T["s1"], width=2.5),
+                                     fill="tozeroy", fillcolor=rgba(T["s1"], 0.10),
+                                     hovertemplate="Review %{x:.1f}% of transfers<br>catch %{y:.1f}% of laundering"
+                                                   "<extra></extra>"))
+            fig.add_vline(x=budget * 100, line=dict(color=T["muted"], width=1))
+            used = float(chosen.cum_txn_share.max()) if not chosen.empty else 0.0
+            fig.add_trace(go.Scatter(x=[used * 100], y=[caught * 100], mode="markers+text", showlegend=False,
+                                     marker=dict(size=12, color=T["s1"], line=dict(width=2, color=T["surface"])),
+                                     text=[f"<b>{caught * 100:.0f}% caught</b> by reviewing {used * 100:.1f}%"],
+                                     textposition="middle right", textfont=dict(size=14, color=T["ink"]),
+                                     hoverinfo="skip"))
+            fig.update_xaxes(title="share of transfers reviewed", range=[0, 30], ticksuffix="%")
+            fig.update_yaxes(title="share of laundering caught", range=[0, 102], ticksuffix="%")
+            show(style(fig, height=400))
+            n_rules = len(chosen)
+            st.subheader(f"Monitoring rules at this budget · {n_rules:,} segment{'s' if n_rules != 1 else ''}")
+            st.caption("Every segment inside the budget, ranked by the 95% Wilson lower bound of the laundering "
+                       "rate, so small lucky segments cannot top the list.")
+            rules = chosen.assign(
+                corridor=lambda d: d.is_cross_bank.map({1: "cross-bank", 0: "same bank"}),
+                fx=lambda d: d.is_cross_currency.map({1: "cross-currency", 0: "same currency"}),
+                rate=lambda d: (d.laundering_rate * 100).round(2), lift=lambda d: d.lift.round(1))
+            st.dataframe(rules[["risk_rank", "payment_format", "payment_currency", "corridor", "fx", "amount_band",
+                                "n_txn", "n_laundering", "rate", "lift"]], hide_index=True, width="stretch",
+                         column_config={"rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
+                                        "lift": st.column_config.NumberColumn("lift", format="%.1fx"),
+                                        "risk_rank": st.column_config.NumberColumn("rank"),
+                                        "payment_format": "payment", "payment_currency": "currency",
+                                        "amount_band": "amount (USD)",
+                                        "n_txn": st.column_config.NumberColumn("transfers", format="%d"),
+                                        "n_laundering": st.column_config.NumberColumn("laundering", format="%d")})
+
+        st.subheader("Risk patterns across all transfers")
+        st.caption("Everything below covers the whole dataset and does not change with the review budget above.")
 
         fc = load("q1_format_currency", variant)
         tp = load("q1_time_profile", variant)
@@ -401,6 +456,9 @@ with tab_q1:
             show(lift_heatmap(h, "payment format", label_from=10, height=460), c1)
             c1.caption("Red marks combinations riskier than average (lift above 1x); numbers mark the hotspots "
                        "(10x or more). Combinations with fewer than 30 transfers are left blank.")
+            csv_button(ranked_lift_data(fc[fc.n_txn >= 30], ["payment_format", "payment_currency"]),
+                       "Download as CSV", f"{variant}_payment_currency_by_lift.csv", where=c1,
+                       help="Every combination shown above, riskiest first, with exact counts and rates.")
         if not tp.empty:
             t = tp.assign(day=tp.day_of_week.map(DOW)).pivot_table(index="day", columns="txn_hour", values="lift")
             t = t.reindex([d for d in DOW.values() if d in t.index])
@@ -414,21 +472,128 @@ with tab_q1:
                               for r in hot.itertuples())
             c2.caption(f"Weekend transfers are **{ratio:.1f}x** as likely to be laundering as weekday ones. "
                        f"Riskiest hours: {peaks}. Hover a cell for its exact lift.")
+            csv_button(ranked_lift_data(tp.assign(day=tp.day_of_week.map(DOW)), ["day_of_week", "day", "txn_hour"]),
+                       "Download as CSV", f"{variant}_day_hour_by_lift.csv", where=c2,
+                       help="Every day-and-hour slot, riskiest first, with exact counts and rates.")
         bc = load("q1_bank_corridors", variant)
         if not bc.empty:
-            st.subheader("Bank-to-bank corridors carrying the most laundered value")
-            top = bc.sort_values("laundered_usd", ascending=False).head(15)
-            st.dataframe(top.assign(rate=top.laundering_rate * 100)[
-                ["from_bank", "to_bank", "n_txn", "n_laundering", "usd_volume", "laundered_usd", "rate", "lift"]],
-                hide_index=True, width="stretch",
-                column_config={"from_bank": st.column_config.TextColumn("from bank"),
-                               "to_bank": st.column_config.TextColumn("to bank"),
-                               "n_txn": st.column_config.NumberColumn("transfers", format="%d"),
-                               "n_laundering": st.column_config.NumberColumn("laundering", format="%d"),
-                               "usd_volume": st.column_config.NumberColumn("total value (USD)", format="compact"),
-                               "laundered_usd": st.column_config.NumberColumn("laundered (USD)", format="compact"),
-                               "rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
-                               "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
+            bc = bc.assign(from_bank=bc.from_bank.astype(str), to_bank=bc.to_bank.astype(str))
+            st.subheader("Bank-to-bank routes")
+            st.caption(f"{len(bc):,} cross-bank routes with at least 50 transfers and at least one laundering "
+                       "transfer. Routes below that bar are left out, so a missing route does not mean no activity.")
+            sent = bc.groupby("from_bank").laundered_usd.sum().sort_values(ascending=False)
+            senders = sent.index.tolist()
+            sender_key = f"corridor_sender_{variant}"
+            route_chart_key = f"corridor_chart_{variant}"
+            route_notice_key = f"corridor_notice_{variant}"
+            heat_key = f"corridor_heatmap_{variant}"
+            t_heat, t_risk, t_value = st.tabs(["Heatmap: route risk between the busiest banks",
+                                               "Riskiest routes from one bank", "Routes moving the most laundered money"])
+            with t_heat:
+                # sender x receiver lift for the 20 banks sending / receiving the most laundered value; a full
+                # bank-by-bank matrix would be thousands wide on HI-Large and almost entirely empty
+                N = 20
+                top_s = senders[:N]
+                top_r = bc.groupby("to_bank").laundered_usd.sum().sort_values(ascending=False).index[:N].tolist()
+                cells = bc[bc.from_bank.isin(top_s) & bc.to_bank.isin(top_r)]
+
+                def open_heat_sender():
+                    """Clicking a cell selects its sender bank in the 'Riskiest routes from one bank' tab."""
+                    points = st.session_state.get(heat_key, {}).get("selection", {}).get("points", [])
+                    bank = next((p.get("customdata") for p in reversed(points)
+                                 if isinstance(p.get("customdata"), str)), None)
+                    if bank is not None:
+                        if bank in sent.index:
+                            st.session_state[sender_key] = bank
+                            st.session_state[route_notice_key] = (
+                                f"Bank {bank} is now selected in the 'Riskiest routes from one bank' tab.")
+
+                if cells.empty:
+                    st.info("None of the busiest banks share a qualifying route.")
+                else:
+                    h = (cells.assign(sender=[f"from bank {b}" for b in cells.from_bank],
+                                      receiver=[f"to {b}" for b in cells.to_bank])
+                         .pivot_table(index="sender", columns="receiver", values="lift")
+                         .reindex(index=[f"from bank {b}" for b in top_s], columns=[f"to {b}" for b in top_r]))
+                    fig = lift_heatmap(h, "receiver bank", label_from=10, height=min(720, 160 + 24 * len(h)))
+                    # Streamlit reports clicks on markers, not on heatmap cells: an invisible square on every filled
+                    # cell carries the sender bank (and the hover text, so hovering still shows the route)
+                    fig.add_trace(go.Scatter(
+                        x=[f"to {b}" for b in cells.to_bank], y=[f"from bank {b}" for b in cells.from_bank],
+                        mode="markers", marker=dict(symbol="square", size=18, color="rgba(0,0,0,0)"),
+                        customdata=cells.from_bank.tolist(), showlegend=False, hoverinfo="text",
+                        hovertext=[f"Bank {r.from_bank} → bank {r.to_bank}<br>lift {r.lift:.1f}x<br>"
+                                   f"{int(r.n_txn):,} transfers, {int(r.n_laundering):,} laundering<br>"
+                                   f"laundered {money(r.laundered_usd)}<br><i>click to pick bank {r.from_bank} "
+                                   "in the next tab</i>" for r in cells.itertuples()]))
+                    fig.update_layout(clickmode="event+select")
+                    st.plotly_chart(fig, width="stretch", theme=None, key=heat_key,
+                                    on_select=open_heat_sender, selection_mode="points")
+                    st.caption(f"Rows: the {len(top_s)} banks sending the most laundered value; columns: the "
+                               f"{len(top_r)} receiving the most. Each cell is one route's lift; numbers mark 10x or "
+                               "more. Blank means that route is below the bar above, not that no money moved. Click a "
+                               "cell to pick its sender bank in the next tab.")
+            with t_risk:
+
+                def open_receiver_as_sender():
+                    """Clicking a receiver's bar makes that bank the sender, or says why it cannot."""
+                    points = st.session_state.get(route_chart_key, {}).get("selection", {}).get("points", [])
+                    bank = next((p.get("customdata") for p in reversed(points)
+                                 if isinstance(p.get("customdata"), str)), None)
+                    if bank in sent.index:
+                        st.session_state[sender_key] = bank
+                        st.session_state[route_notice_key] = f"Now showing routes sent by bank {bank}."
+                    elif bank is not None:
+                        st.session_state[route_notice_key] = (
+                            f"Bank {bank} sends on no route that meets the bar above, so there is nothing to open. "
+                            "The sender has not changed.")
+
+                notice = st.session_state.pop(route_notice_key, None)
+                if notice:
+                    st.info(notice)
+                sender = st.selectbox("Sender bank", senders, key=sender_key,
+                                      format_func=lambda b: f"Bank {b} · {money(sent[b])} laundered sent",
+                                      help="Banks are listed by laundered value sent; type to search for a bank id.")
+                routes, n_routes = corridor_preview(bc, sender, max_routes=15)
+                ylabels = [f"to bank {b}" for b in routes.to_bank]
+                fig = go.Figure(go.Bar(
+                    y=ylabels, x=routes.lift, orientation="h", marker=dict(color=T["s1"]), width=0.6,
+                    customdata=routes.to_bank.tolist(),
+                    text=[f"{r.lift:.1f}x · {int(r.n_txn):,} transfers" for r in routes.itertuples()],
+                    textposition="outside", cliponaxis=False, constraintext="none",
+                    textfont=dict(color=T["ink"], size=13),
+                    hovertext=[f"Bank {sender} → bank {r.to_bank}<br>lift {r.lift:.1f}x<br>{int(r.n_txn):,} transfers, "
+                               f"{int(r.n_laundering):,} laundering ({r.laundering_rate * 100:.2f}%)<br>"
+                               f"laundered {money(r.laundered_usd)}<br><i>click to open bank {r.to_bank} as sender</i>"
+                               for r in routes.itertuples()], hoverinfo="text"))
+                fig.update_xaxes(title="risk lift (times the overall laundering rate)", showgrid=True,
+                                 gridcolor=T["grid"], range=[0, float(routes.lift.max()) * 1.45 or 1], ticksuffix="x")
+                fig.update_yaxes(type="category", autorange="reversed", showgrid=False)
+                fig.update_layout(clickmode="event+select")
+                st.plotly_chart(style(fig, height=90 + 34 * len(routes), legend=False), width="stretch", theme=None,
+                                key=route_chart_key, on_select=open_receiver_as_sender, selection_mode="points")
+                st.caption(f"{'All' if n_routes <= 15 else f'Top {len(routes)} of'} {n_routes:,} route"
+                           f"{'s' if n_routes != 1 else ''} from bank {sender}, highest lift first. Check the transfer "
+                           "count before trusting a high lift. Click a bar to follow the money to that bank.")
+                csv_button(ranked_lift_data(bc[bc.from_bank == sender], ["from_bank", "to_bank"]),
+                           f"Download all {n_routes:,} routes from bank {sender} (CSV)",
+                           f"{variant}_routes_from_bank_{sender}.csv")
+            with t_value:
+                top = bc.sort_values("laundered_usd", ascending=False)
+                st.dataframe(top.head(15).assign(rate=top.laundering_rate * 100)[
+                    ["from_bank", "to_bank", "n_txn", "n_laundering", "usd_volume", "laundered_usd", "rate", "lift"]],
+                    hide_index=True, width="stretch",
+                    column_config={"from_bank": st.column_config.TextColumn("from bank"),
+                                   "to_bank": st.column_config.TextColumn("to bank"),
+                                   "n_txn": st.column_config.NumberColumn("transfers", format="%d"),
+                                   "n_laundering": st.column_config.NumberColumn("laundering", format="%d"),
+                                   "usd_volume": st.column_config.NumberColumn("total value (USD)", format="compact"),
+                                   "laundered_usd": st.column_config.NumberColumn("laundered (USD)", format="compact"),
+                                   "rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
+                                   "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
+                st.caption(f"Top 15 of {len(top):,} routes by laundered value.")
+                csv_button(top.assign(laundering_rate_pct=top.laundering_rate * 100).drop(columns="laundering_rate"),
+                           f"Download all {len(top):,} routes (CSV)", f"{variant}_bank_routes_all.csv")
 
 # ----------------------------------------------------------------------------------------------- BQ2
 with tab_q2:
@@ -442,6 +607,338 @@ with tab_q2:
                   ("precision_network_only", "Network motifs only"),
                   ("precision_segment_only", "Channel rules only (BQ1)"),
                   ("base_rate", "Random selection")]
+        HALF = {"holdout": "graded (labels never used)", "calibration": "learning (labels set the points)"}
+        has_split = "split" in wl.columns
+        with st.container(border=True):
+            st.subheader("Investigator watchlist")
+            st.caption("The search and filter apply to this table and to the money-trail account picker below. "
+                       "Click a row to open that account's money trail.")
+            f1, f2 = st.columns([3, 2])
+            with f1:
+                q = st.text_input("Filter by account id or reason (e.g. 'cycle', 'mule')", "")
+            view = wl[wl.acct.str.contains(q, case=False, regex=False)
+                      | wl.reasons.fillna("").str.contains(q, case=False, regex=False)] if q else wl
+            with f2:
+                st.write("")
+                graded_only = has_split and st.toggle("Only the graded half (accounts whose labels were never used)",
+                                                      value=False)
+            if graded_only:
+                view = view[view["split"] == "holdout"]
+            # money trails are published for the top 300 accounts; the picker follows the watchlist filter
+            filtered = view[view.risk_rank <= 300].acct.tolist()
+            options = filtered or wl.acct.head(300).tolist()
+            trail_accounts = set(wl[wl.risk_rank <= 300].acct)
+            picker_key = f"trail_account_{variant}"
+            chart_key = f"trail_graph_{variant}"
+            notice_key = f"trail_notice_{variant}"
+            # The table's tick is remembered by ROW POSITION and Streamlit cannot set it from code, so whenever the
+            # account changes other than by clicking a row (filter, search, dropdown, graph) the tick is cleared by
+            # giving the table a fresh key. Otherwise the tick would sit on whatever account now fills that row.
+            nonce_key, sig_key = f"watchlist_table_nonce_{variant}", f"watchlist_filter_sig_{variant}"
+
+            def clear_tick():
+                st.session_state[nonce_key] = st.session_state.get(nonce_key, 0) + 1
+
+            if st.session_state.get(sig_key) != (q, graded_only):
+                st.session_state[sig_key] = (q, graded_only)
+                clear_tick()
+            table_key = f"watchlist_table_{variant}_{st.session_state[nonce_key]}"
+
+            def open_trail(node, from_table=False):
+                """Open a clicked account's trail, or say why it cannot be opened."""
+                if node in options:
+                    if not from_table:
+                        clear_tick()
+                    st.session_state[picker_key] = node
+                    st.session_state[notice_key] = (f"Opened money trail for {node}. The graph and account "
+                                                    "reasons now show this account.")
+                elif node in trail_accounts:
+                    st.session_state[notice_key] = (
+                        f"{node} does not match the current watchlist search or graded-half filter. Clear the filter to open its trail. "
+                        "The selected account has not changed.")
+                else:
+                    st.session_state[notice_key] = (
+                        f"{node} is outside the top-300 trail coverage, so a separate money trail is not available. "
+                        "The selected account has not changed.")
+
+            def follow_table_row():
+                rows = st.session_state.get(table_key, {}).get("selection", {}).get("rows", [])
+                if rows and rows[0] < len(shown):
+                    open_trail(shown.iloc[rows[0]].acct, from_table=True)
+
+            def follow_trail_node():
+                """Clicking a node on the graph opens that account's trail (or says why it cannot)."""
+                points = st.session_state.get(chart_key, {}).get("selection", {}).get("points", [])
+                for point in reversed(points):
+                    if isinstance(point.get("customdata"), str):
+                        open_trail(point["customdata"])
+                        break
+
+            # table cells cannot wrap, so the table shows the short form of the red flags; the full sentences
+            # appear as bullet points for the selected account in the money-trail panel below
+            cols = ["risk_rank", "acct", "risk"] + (["half"] if has_split else []) + ["red_flags"]
+            shown = view                                # all 1,000 accounts; the table scrolls
+            st.dataframe(shown.assign(risk=(shown.risk_probability * 100).round(1),
+                                      half=shown["split"].map(HALF) if has_split else "",
+                                      red_flags=[flag_tags(r, limit=9) or "channel risk only" for r in shown.itertuples()]
+                                      )[cols],
+                         hide_index=True, width="stretch", height=320, key=table_key,
+                         on_select=follow_table_row, selection_mode="single-row",
+                         column_config={"risk_rank": st.column_config.NumberColumn("rank"),
+                                        "acct": st.column_config.TextColumn("account"),
+                                        "risk": st.column_config.ProgressColumn("risk score", format="%.1f",
+                                                                                min_value=0, max_value=100),
+                                        "half": st.column_config.TextColumn("account half"),
+                                        "red_flags": st.column_config.TextColumn(
+                                            "red flags", help="Short form. Click the row to read each reason in "
+                                                              "full in the money-trail explorer below.")})
+            st.caption(f"{len(view):,} of {len(wl):,} watchlist accounts match"
+                       + ". Money trails are available for the top 300. Scores use only each account's own money-flow patterns; the points per red flag were "
+                         "learned from the labels of the learning half, on the learning days.")
+
+            st.subheader("Money-trail explorer")
+            notice = st.session_state.pop(notice_key, None)
+            if notice:
+                st.info(notice)
+            if not filtered:
+                st.caption("No top-300 account matches the watchlist search or filter, so the picker lists the whole "
+                           "top 300.")
+            k1, k2, k3 = st.columns([2, 2, 2])
+            with k1:
+                # the filter can remove the selected account: set the replacement explicitly so the dropdown
+                # shows it too (deleting the key let the graph move to the first account while the box kept the old one)
+                if st.session_state.get(picker_key) not in options:
+                    st.session_state[picker_key] = options[0]
+                acct = st.selectbox("Account", options, key=picker_key, on_change=clear_tick)
+            with k2:
+                labels_on = st.segmented_control(
+                    "Labels on the graph", ["Off", "Flagged accounts", "All accounts"], default="Flagged accounts",
+                    help="Writes a short remark next to each dot. 'All accounts' is easiest to read full screen.")
+            with k3:
+                st.write("")
+                show_truth = st.toggle("Reveal IBM's answer key", value=False,
+                                       help="Laundering transfers turn red. The labels are only used to check the "
+                                            "watchlist afterwards; they are not used to draw the graph or to score "
+                                            "any account.")
+            edges = load("q2_watchlist_edges", variant)
+            if not edges.empty and acct:
+                sub = edges[(edges.src_id == acct) | (edges.dst_id == acct)]
+                nbrs = set(sub.src_id) | set(sub.dst_id)
+                sub = edges[edges.src_id.isin(nbrs) & edges.dst_id.isin(nbrs)]
+                g = nx.DiGraph()
+                for r in sub.itertuples():
+                    g.add_edge(r.src_id, r.dst_id, usd=r.usd, n=r.n_txn, bad=r.any_laundering)
+                g.add_node(acct)
+                risk = dict(zip(wl.acct, wl.risk_probability))
+                rank = dict(zip(wl.acct, wl.risk_rank))
+                # rings, not a force layout: a force layout pulls a laundering ring into a dense knot where labels
+                # collide. Here every flagged counterparty gets its own slot on the inner ring.
+                inner = sorted((n for n in g.nodes if n in risk and n != acct), key=lambda n: rank[n])
+                outer = sorted((n for n in g.nodes if n not in risk),
+                               key=lambda n: -sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)))
+                pos = {acct: (0.0, 0.0)}
+
+                def ring(members, radius, start):
+                    for i, n in enumerate(members):
+                        a = start + 2 * np.pi * i / len(members)
+                        pos[n] = (radius * np.cos(a), radius * np.sin(a))
+
+                ring(inner, 0.6 if outer else 0.8, np.pi / 2)
+                if inner and outer:
+                    # outer accounts go in the gaps between inner accounts, with a clear margin around each inner
+                    # account's direction, so arrows to the outer ring never run through an inner label
+                    step = 2 * np.pi / len(inner)
+                    margin = min(np.radians(14), step / 4)
+                    gaps = [outer[gi::len(inner)] for gi in range(len(inner))]   # deal round-robin: big flows spread out
+                    for gi, members in enumerate(gaps):
+                        lo = np.pi / 2 + gi * step + margin
+                        hi = np.pi / 2 + (gi + 1) * step - margin
+                        for j, n in enumerate(members):
+                            a = lo + (j + 1) * (hi - lo) / (len(members) + 1)
+                            pos[n] = (np.cos(a), np.sin(a))
+                else:
+                    ring(outer, 1.0, np.pi / 2)
+                rows = {r.acct: r for r in wl.itertuples()}
+                me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
+                nodes = list(g.nodes)
+                flagged = [n for n in nodes if n in risk]
+                unflagged = [n for n in nodes if n not in risk]
+
+                def flows(n, short=False):
+                    """Money between the selected account and n, from n's point of view."""
+                    got = g.edges[acct, n] if g.has_edge(acct, n) else None
+                    paid = g.edges[n, acct] if g.has_edge(n, acct) else None
+                    parts = ([f"received {money(got['usd'])}" + ("" if short else f" from {me}")] if got else []) + \
+                            ([f"paid {money(paid['usd'])}" + ("" if short else f" to {me}")] if paid else [])
+                    return ", ".join(parts)
+
+                # arrows: payer -> payee, coloured by direction relative to the selected account;
+                # transfers between its counterparties stay faint so the selected account's flows stand out
+                IN_C, OUT_C, OTHER_C, BAD_C = T["s1"], T["s2"], rgba(T["muted"], 0.30), T["bad"]
+                arrows, mx, my, mtext = [], [], [], []
+                for u, v, d in g.edges(data=True):
+                    red = bool(show_truth and d["bad"])
+                    mine = acct in (u, v)
+                    colour = BAD_C if red else IN_C if v == acct else OUT_C if u == acct else OTHER_C
+                    arrows.append(dict(x=pos[v][0], y=pos[v][1], ax=pos[u][0], ay=pos[u][1],
+                                       xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
+                                       arrowhead=2, arrowsize=1.1 if (red or mine) else 0.7,
+                                       arrowwidth=2.5 if red else 1.6 if mine else 0.8, arrowcolor=colour,
+                                       standoff=14 if v == acct else 7, startstandoff=14 if u == acct else 7))
+                    mx.append((pos[u][0] + pos[v][0]) / 2)
+                    my.append((pos[u][1] + pos[v][1]) / 2)
+                    mtext.append(f"{u} → {v}<br>{int(d['n']):,} transfer(s), {money(d['usd'])}"
+                                 + ("<br><b>laundering (answer key)</b>" if red else ""))
+
+                # smart label placement: each label points away from the centre of its own group,
+                # so labels fan outwards instead of piling up inside the cluster
+                def centre(group):
+                    pts = [pos[n] for n in group] or [pos[acct]]
+                    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+                all_c = centre([n for n in nodes if n != acct])
+                SIDES = ["middle right", "top right", "top center", "top left",
+                         "middle left", "bottom left", "bottom center", "bottom right"]
+
+                def side(n):
+                    cx, cy = all_c if n == acct else pos[acct]          # rings: every label points outwards
+                    dx, dy = pos[n][0] - cx, pos[n][1] - cy
+                    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+                        return "top center"
+                    return SIDES[int(((np.degrees(np.arctan2(dy, dx)) + 22.5) % 360) // 45)]
+
+                def label(n):
+                    if labels_on not in ("Flagged accounts", "All accounts"):
+                        return ""
+                    if n == acct:
+                        return ""                                # drawn as a chip (annotation) instead
+                    if n in risk:
+                        # rank, red flags, then the money it moved with the selected account (if any direct flow)
+                        money_line = flows(n, short=True)
+                        return (f"<b>#{int(rank[n]):,}</b><br>{flag_tags(rows[n], limit=2) or 'channel risk'}"
+                                + (f"<br>{money_line}" if money_line else ""))
+                    return flows(n, short=True) if labels_on == "All accounts" else ""
+
+                def hover(n):
+                    if n in risk:
+                        extra = "" if n == acct else f"<br>{flows(n)}"
+                        return (f"<b>{n}</b><br>watchlist #{int(rank[n]):,}, risk {risk[n]:.2f}"
+                                f"<br>{flag_tags(rows[n], limit=9) or 'channel risk only'}{extra}")
+                    return f"<b>{n}</b><br>not on the watchlist<br>{flows(n)}"
+
+                # axis ranges first: label placement works in pixels, so it needs the same data -> pixel mapping
+                xs, ys = [p[0] for p in pos.values()], [p[1] for p in pos.values()]
+                padx, pady = (max(xs) - min(xs)) * 0.18 + 0.05, (max(ys) - min(ys)) * 0.10 + 0.05
+                xr, yr = (min(xs) - padx, max(xs) + padx), (min(ys) - pady, max(ys) + pady)
+                # plot area in px: 600 high minus margins; width = the graph column (3/5 of the wide page) minus
+                # margins and colour bar. Assumed on the narrow side, so labels that fit here fit wider screens too.
+                PW, PH = 640, 520
+                to_px = lambda x, y: ((x - xr[0]) / (xr[1] - xr[0]) * PW, (yr[1] - y) / (yr[1] - yr[0]) * PH)
+                radius = {n: (16 if n == acct else 8.5 if n in risk else 7) for n in nodes}
+                obstacles = [(px - radius[n], py - radius[n], px + radius[n], py + radius[n])
+                             for n in nodes for px, py in [to_px(*pos[n])]]
+                if labels_on in ("Flagged accounts", "All accounts"):        # the "#1 selected" chip above the centre
+                    cx, cy = to_px(*pos[acct])
+                    chip_w = (len(me) + 9) * 13 * 0.6 + 10
+                    obstacles.append((cx - chip_w / 2, cy - 26 - 13, cx + chip_w / 2, cy - 26 + 13))
+                items = [(n, pos[n], radius[n], 12, side(n), [label(n), f"<b>#{int(rank[n]):,}</b>"])
+                         for n in inner if label(n)] +                         [(n, pos[n], radius[n], 11, side(n), [label(n)]) for n in outer if label(n)]
+                placed = place_labels(items, obstacles, to_px)
+                hidden = sum(1 for n, _, _, _, _, t in items if placed[n][1] != t[0])
+                lab = lambda n: placed[n][1] if n in placed else ""
+                where = lambda n: placed[n][0] if n in placed else side(n)
+
+                key = [(IN_C, f"Money into {me}"), (OUT_C, f"Money out of {me}"),
+                       (rgba(T["muted"], 0.6), "Between its counterparties")] + \
+                      ([(BAD_C, "Laundering (answer key)")] if show_truth else [])
+                fig = go.Figure(
+                    [go.Scatter(x=[None], y=[None], mode="lines", line=dict(color=c, width=3), name=n,
+                                hoverinfo="skip") for c, n in key]
+                    + [go.Scatter(x=[None], y=[None], mode="markers", name="Not flagged", hoverinfo="skip",
+                                  marker=dict(size=10, color=T["unflagged"]))]
+                    + [go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=14, color="rgba(0,0,0,0)"),
+                                  text=mtext, hoverinfo="text", showlegend=False)]
+                    + [go.Scatter(x=[pos[n][0] for n in unflagged], y=[pos[n][1] for n in unflagged],
+                                  customdata=unflagged, mode="markers+text", showlegend=False,
+                                  marker=dict(size=10, color=T["unflagged"], line=dict(width=2, color=T["surface"])),
+                                  text=[lab(n) for n in unflagged], textposition=[where(n) for n in unflagged],
+                                  textfont=dict(size=11, color=T["ink2"]),
+                                  hovertext=[hover(n) for n in unflagged], hoverinfo="text")]
+                    + [go.Scatter(x=[pos[n][0] for n in flagged], y=[pos[n][1] for n in flagged],
+                                  customdata=flagged, mode="markers+text", showlegend=False,
+                                  marker=dict(size=[26 if n == acct else 13 for n in flagged],
+                                              color=[risk[n] for n in flagged], colorscale=T["risk"], cmin=0, cmax=1,
+                                              line=dict(width=[2.5 if n == acct else 2 for n in flagged],
+                                                        color=[T["ink"] if n == acct else T["surface"] for n in flagged]),
+                                              colorbar=dict(title=dict(text="risk score",
+                                                                       font=dict(color=T["muted"], size=12)),
+                                                            tickfont=dict(color=T["ink2"]), outlinewidth=0,
+                                                            thickness=10, len=0.6, y=0.4)),
+                                  text=[lab(n) for n in flagged], textposition=[where(n) for n in flagged],
+                                  textfont=dict(size=12, color=T["ink"]),
+                                  hovertext=[hover(n) for n in flagged], hoverinfo="text")])
+                if labels_on in ("Flagged accounts", "All accounts"):
+                    arrows.append(dict(x=pos[acct][0], y=pos[acct][1], xref="x", yref="y", showarrow=False, yshift=26,
+                                       text=f"<b>{me}</b> selected", font=dict(size=13, color=T["ink"]),
+                                       bgcolor=rgba(T["surface"], 0.9), bordercolor=T["axis"], borderpad=4))
+                fig.update_layout(annotations=arrows, clickmode="event+select")
+                fig.update_xaxes(visible=False, range=list(xr))
+                fig.update_yaxes(visible=False, range=list(yr))
+                fig = style(fig, height=600)
+                fig.update_layout(margin=dict(l=40, r=40, t=50, b=30))
+
+                gcol, pcol = st.columns([3, 2])
+                gcol.plotly_chart(fig, width="stretch", theme=None, key=chart_key,
+                                  on_select=follow_trail_node, selection_mode="points")
+                gcol.caption("Click a top-300 account in the filtered list to open its trail. Arrows point from payer to "
+                             "payee: transfers on the learning days, with the account's 40 largest counterparties by USD. "
+                             "Hover a dot or the middle of an arrow for details; use the full-screen button for the "
+                             "clearest view."
+                             + (f" {hidden} label{'s' if hidden != 1 else ''} hidden or shortened so none overlap; "
+                                "hover those dots for details." if hidden else ""))
+
+                # investigator panel: who belongs in one case, and where money left the flagged group
+                with pcol:
+                    inside = [d for u, v, d in g.edges(data=True) if u in risk and v in risk]
+                    exits = sorted(((d["usd"], v) for u, v, d in g.edges(data=True) if u in risk and v not in risk),
+                                   reverse=True)
+                    if len(flagged) > 1:
+                        others = sorted(int(rank[n]) for n in flagged if n != acct)
+                        listed = ", ".join(f"#{r:,}" for r in others[:8]) + (" and more" if len(others) > 8 else "")
+                        st.info(f"**Suggested case:** {me} with {len(others)} flagged counterpart"
+                                f"{'y' if len(others) == 1 else 'ies'} ({listed}). Between them they moved "
+                                f"{money_md(sum(d['usd'] for d in inside))} in "
+                                f"{sum(int(d['n']) for d in inside):,} transfers"
+                                + (f". Largest flow out to an unflagged account: {money_md(exits[0][0])} to "
+                                   f"`{exits[0][1]}`, worth checking as a possible cash-out point." if exits else "."))
+                    row = wl[wl.acct == acct].iloc[0]
+                    why = [r.strip() for r in str(row.reasons if pd.notna(row.reasons) else "").split(";")
+                           if r.strip()]
+                    bullets = "\n".join(f"- {r}" for r in why) if why else "- Channel risk only"
+                    st.markdown(f"**Why {me} was flagged**\n\n{bullets}")
+                    if has_split:
+                        st.markdown("**Account half:** " + (
+                            "graded. Its own labels were never used to build the scorecard."
+                            if row["split"] == "holdout" else
+                            "learning. Its labels helped set the points per red flag; its score still comes only "
+                            "from its own money-flow patterns."))
+                    table = pd.DataFrame([{
+                        "account": n,
+                        "rank": int(rank[n]) if n in rank else None,
+                        "risk score": round(risk[n] * 100, 1) if n in risk else None,
+                        "red flags": (flag_tags(rows[n], limit=9) or "channel risk") if n in risk else "not flagged",
+                        f"money with {me}": "selected account" if n == acct else flows(n, short=True),
+                        "_usd": sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)),
+                    } for n in nodes])
+                    table = pd.concat([table[table.account == acct],
+                                       table[(table.account != acct) & table["rank"].notna()].sort_values("rank"),
+                                       table[table["rank"].isna()].sort_values("_usd", ascending=False)])
+                    st.markdown(f"**Accounts in this money trail** ({len(nodes)})")
+                    st.dataframe(table.drop(columns="_usd"), hide_index=True, width="stretch", height=300,
+                                 column_config={"rank": st.column_config.NumberColumn("rank", format="#%d")})
+
+        st.subheader("How the watchlist is scored and graded")
+        st.caption("Covers all accounts. Nothing here changes with the search, filter or selected account above.")
         # OFFICIAL figure first (docs/decisions.md): accounts are scored from the learning days only and graded on
         # whether they launder on the LATER days; the tail days (almost all laundering) are shown separately.
         if not official.empty:
@@ -466,245 +963,6 @@ with tab_q2:
                                                 "half (labels never used)", "truly involved in laundering"))
                 st.caption("Spotting schemes that are already running is easier than predicting who launders next, "
                            "so this figure is higher than the official one above.")
-        HALF = {"holdout": "graded (labels never used)", "calibration": "learning (labels set the points)"}
-        has_split = "split" in wl.columns
-        st.subheader("Investigator watchlist")
-        f1, f2 = st.columns([3, 2])
-        with f1:
-            q = st.text_input("Filter by account id or reason (e.g. 'cycle', 'mule')", "")
-        view = wl[wl.acct.str.contains(q, case=False, regex=False)
-                  | wl.reasons.fillna("").str.contains(q, case=False, regex=False)] if q else wl
-        with f2:
-            st.write("")
-            graded_only = has_split and st.toggle("Only the graded half (accounts whose labels were never used)",
-                                                  value=False)
-        if graded_only:
-            view = view[view["split"] == "holdout"]
-        # table cells cannot wrap, so the table shows the short form of the red flags; the full sentences
-        # appear as bullet points for the selected account in the money-trail panel below
-        cols = ["risk_rank", "acct", "risk"] + (["half"] if has_split else []) + ["red_flags"]
-        shown = view.head(300)
-        st.dataframe(shown.assign(risk=(shown.risk_probability * 100).round(1),
-                                  half=shown["split"].map(HALF) if has_split else "",
-                                  red_flags=[flag_tags(r, limit=9) or "channel risk only" for r in shown.itertuples()]
-                                  )[cols],
-                     hide_index=True, width="stretch", height=320,
-                     column_config={"risk_rank": st.column_config.NumberColumn("rank"),
-                                    "acct": st.column_config.TextColumn("account"),
-                                    "risk": st.column_config.ProgressColumn("risk score", format="%.1f",
-                                                                            min_value=0, max_value=100),
-                                    "half": st.column_config.TextColumn("account half"),
-                                    "red_flags": st.column_config.TextColumn(
-                                        "red flags", help="Short form. Pick the account in the money-trail "
-                                                          "explorer below to read each reason in full.")})
-        st.caption(f"{len(view):,} of {len(wl):,} watchlist accounts match. Scores use only each account's own "
-                   "money-flow patterns; the points per red flag were learned from the labels of the learning "
-                   "half, on the learning days.")
-
-        st.subheader("Money-trail explorer")
-        # money trails are published for the top 300 accounts; the picker follows the watchlist filter
-        options = view[view.risk_rank <= 300].acct.tolist() or wl.acct.head(300).tolist()
-        k1, k2, k3 = st.columns([2, 2, 2])
-        with k1:
-            acct = st.selectbox("Account", options)
-        with k2:
-            labels_on = st.segmented_control(
-                "Labels on the graph", ["Off", "Flagged accounts", "All accounts"], default="Flagged accounts",
-                help="Writes a short remark next to each dot. 'All accounts' is easiest to read full screen.")
-        with k3:
-            st.write("")
-            show_truth = st.toggle("Reveal IBM's answer key", value=False,
-                                   help="Laundering transfers turn red. The labels are only used to check the "
-                                        "watchlist afterwards; they are not used to draw the graph or to score "
-                                        "any account.")
-        edges = load("q2_watchlist_edges", variant)
-        if not edges.empty and acct:
-            sub = edges[(edges.src_id == acct) | (edges.dst_id == acct)]
-            nbrs = set(sub.src_id) | set(sub.dst_id)
-            sub = edges[edges.src_id.isin(nbrs) & edges.dst_id.isin(nbrs)]
-            g = nx.DiGraph()
-            for r in sub.itertuples():
-                g.add_edge(r.src_id, r.dst_id, usd=r.usd, n=r.n_txn, bad=r.any_laundering)
-            g.add_node(acct)
-            risk = dict(zip(wl.acct, wl.risk_probability))
-            rank = dict(zip(wl.acct, wl.risk_rank))
-            # rings, not a force layout: a force layout pulls a laundering ring into a dense knot where labels
-            # collide. Here every flagged counterparty gets its own slot on the inner ring.
-            inner = sorted((n for n in g.nodes if n in risk and n != acct), key=lambda n: rank[n])
-            outer = sorted((n for n in g.nodes if n not in risk),
-                           key=lambda n: -sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)))
-            pos = {acct: (0.0, 0.0)}
-
-            def ring(members, radius, start):
-                for i, n in enumerate(members):
-                    a = start + 2 * np.pi * i / len(members)
-                    pos[n] = (radius * np.cos(a), radius * np.sin(a))
-
-            ring(inner, 0.6 if outer else 0.8, np.pi / 2)
-            if inner and outer:
-                # outer accounts go in the gaps between inner accounts, with a clear margin around each inner
-                # account's direction, so arrows to the outer ring never run through an inner label
-                step = 2 * np.pi / len(inner)
-                margin = min(np.radians(14), step / 4)
-                gaps = [outer[gi::len(inner)] for gi in range(len(inner))]   # deal round-robin: big flows spread out
-                for gi, members in enumerate(gaps):
-                    lo = np.pi / 2 + gi * step + margin
-                    hi = np.pi / 2 + (gi + 1) * step - margin
-                    for j, n in enumerate(members):
-                        a = lo + (j + 1) * (hi - lo) / (len(members) + 1)
-                        pos[n] = (np.cos(a), np.sin(a))
-            else:
-                ring(outer, 1.0, np.pi / 2)
-            rows = {r.acct: r for r in wl.itertuples()}
-            me = f"#{int(rank[acct]):,}" if acct in rank else "this account"
-            nodes = list(g.nodes)
-            flagged = [n for n in nodes if n in risk]
-            unflagged = [n for n in nodes if n not in risk]
-
-            def flows(n, short=False):
-                """Money between the selected account and n, from n's point of view."""
-                got = g.edges[acct, n] if g.has_edge(acct, n) else None
-                paid = g.edges[n, acct] if g.has_edge(n, acct) else None
-                parts = ([f"received {money(got['usd'])}" + ("" if short else f" from {me}")] if got else []) + \
-                        ([f"paid {money(paid['usd'])}" + ("" if short else f" to {me}")] if paid else [])
-                return ", ".join(parts)
-
-            # arrows: payer -> payee, coloured by direction relative to the selected account;
-            # transfers between its counterparties stay faint so the selected account's flows stand out
-            IN_C, OUT_C, OTHER_C, BAD_C = T["s1"], T["s2"], rgba(T["muted"], 0.30), T["bad"]
-            arrows, mx, my, mtext = [], [], [], []
-            for u, v, d in g.edges(data=True):
-                red = bool(show_truth and d["bad"])
-                mine = acct in (u, v)
-                colour = BAD_C if red else IN_C if v == acct else OUT_C if u == acct else OTHER_C
-                arrows.append(dict(x=pos[v][0], y=pos[v][1], ax=pos[u][0], ay=pos[u][1],
-                                   xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
-                                   arrowhead=2, arrowsize=1.1 if (red or mine) else 0.7,
-                                   arrowwidth=2.5 if red else 1.6 if mine else 0.8, arrowcolor=colour,
-                                   standoff=14 if v == acct else 7, startstandoff=14 if u == acct else 7))
-                mx.append((pos[u][0] + pos[v][0]) / 2)
-                my.append((pos[u][1] + pos[v][1]) / 2)
-                mtext.append(f"{u} → {v}<br>{int(d['n']):,} transfer(s), {money(d['usd'])}"
-                             + ("<br><b>laundering (answer key)</b>" if red else ""))
-
-            # smart label placement: each label points away from the centre of its own group,
-            # so labels fan outwards instead of piling up inside the cluster
-            def centre(group):
-                pts = [pos[n] for n in group] or [pos[acct]]
-                return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
-
-            all_c = centre([n for n in nodes if n != acct])
-            SIDES = ["middle right", "top right", "top center", "top left",
-                     "middle left", "bottom left", "bottom center", "bottom right"]
-
-            def side(n):
-                cx, cy = all_c if n == acct else pos[acct]          # rings: every label points outwards
-                dx, dy = pos[n][0] - cx, pos[n][1] - cy
-                if abs(dx) < 1e-9 and abs(dy) < 1e-9:
-                    return "top center"
-                return SIDES[int(((np.degrees(np.arctan2(dy, dx)) + 22.5) % 360) // 45)]
-
-            def label(n):
-                if labels_on not in ("Flagged accounts", "All accounts"):
-                    return ""
-                if n == acct:
-                    return ""                                # drawn as a chip (annotation) instead
-                if n in risk:
-                    return f"<b>#{int(rank[n]):,}</b><br>{flag_tags(rows[n], limit=2) or 'channel risk'}"
-                return flows(n, short=True) if labels_on == "All accounts" else ""
-
-            def hover(n):
-                if n in risk:
-                    extra = "" if n == acct else f"<br>{flows(n)}"
-                    return (f"<b>{n}</b><br>watchlist #{int(rank[n]):,}, risk {risk[n]:.2f}"
-                            f"<br>{flag_tags(rows[n], limit=9) or 'channel risk only'}{extra}")
-                return f"<b>{n}</b><br>not on the watchlist<br>{flows(n)}"
-
-            key = [(IN_C, f"Money into {me}"), (OUT_C, f"Money out of {me}"),
-                   (rgba(T["muted"], 0.6), "Between its counterparties")] + \
-                  ([(BAD_C, "Laundering (answer key)")] if show_truth else [])
-            fig = go.Figure(
-                [go.Scatter(x=[None], y=[None], mode="lines", line=dict(color=c, width=3), name=n,
-                            hoverinfo="skip") for c, n in key]
-                + [go.Scatter(x=[None], y=[None], mode="markers", name="Not flagged", hoverinfo="skip",
-                              marker=dict(size=10, color=T["unflagged"]))]
-                + [go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=14, color="rgba(0,0,0,0)"),
-                              text=mtext, hoverinfo="text", showlegend=False)]
-                + [go.Scatter(x=[pos[n][0] for n in unflagged], y=[pos[n][1] for n in unflagged],
-                              mode="markers+text", showlegend=False,
-                              marker=dict(size=10, color=T["unflagged"], line=dict(width=2, color=T["surface"])),
-                              text=[label(n) for n in unflagged], textposition=[side(n) for n in unflagged],
-                              textfont=dict(size=11, color=T["ink2"]),
-                              hovertext=[hover(n) for n in unflagged], hoverinfo="text")]
-                + [go.Scatter(x=[pos[n][0] for n in flagged], y=[pos[n][1] for n in flagged],
-                              mode="markers+text", showlegend=False,
-                              marker=dict(size=[26 if n == acct else 13 for n in flagged],
-                                          color=[risk[n] for n in flagged], colorscale=T["risk"], cmin=0, cmax=1,
-                                          line=dict(width=[2.5 if n == acct else 2 for n in flagged],
-                                                    color=[T["ink"] if n == acct else T["surface"] for n in flagged]),
-                                          colorbar=dict(title=dict(text="risk score",
-                                                                   font=dict(color=T["muted"], size=12)),
-                                                        tickfont=dict(color=T["ink2"]), outlinewidth=0,
-                                                        thickness=10, len=0.6, y=0.4)),
-                              text=[label(n) for n in flagged], textposition=[side(n) for n in flagged],
-                              textfont=dict(size=12, color=T["ink"]),
-                              hovertext=[hover(n) for n in flagged], hoverinfo="text")])
-            if labels_on in ("Flagged accounts", "All accounts"):
-                arrows.append(dict(x=pos[acct][0], y=pos[acct][1], xref="x", yref="y", showarrow=False, yshift=26,
-                                   text=f"<b>{me}</b> selected", font=dict(size=13, color=T["ink"]),
-                                   bgcolor=rgba(T["surface"], 0.9), bordercolor=T["axis"], borderpad=4))
-            xs, ys = [p[0] for p in pos.values()], [p[1] for p in pos.values()]
-            padx, pady = (max(xs) - min(xs)) * 0.18 + 0.05, (max(ys) - min(ys)) * 0.10 + 0.05
-            fig.update_layout(annotations=arrows)
-            fig.update_xaxes(visible=False, range=[min(xs) - padx, max(xs) + padx])
-            fig.update_yaxes(visible=False, range=[min(ys) - pady, max(ys) + pady])
-            fig = style(fig, height=600)
-            fig.update_layout(margin=dict(l=40, r=40, t=50, b=30))
-
-            gcol, pcol = st.columns([3, 2])
-            show(fig, gcol)
-            gcol.caption("Arrows point from payer to payee: transfers on the learning days, with the account's 40 "
-                         "largest counterparties by USD. Hover a dot or the middle of an arrow for details; use the "
-                         "full-screen button for the clearest view.")
-
-            # investigator panel: who belongs in one case, and where money left the flagged group
-            with pcol:
-                inside = [d for u, v, d in g.edges(data=True) if u in risk and v in risk]
-                exits = sorted(((d["usd"], v) for u, v, d in g.edges(data=True) if u in risk and v not in risk),
-                               reverse=True)
-                if len(flagged) > 1:
-                    others = sorted(int(rank[n]) for n in flagged if n != acct)
-                    listed = ", ".join(f"#{r:,}" for r in others[:8]) + (" and more" if len(others) > 8 else "")
-                    st.info(f"**Suggested case:** {me} with {len(others)} flagged counterpart"
-                            f"{'y' if len(others) == 1 else 'ies'} ({listed}). Between them they moved "
-                            f"{money_md(sum(d['usd'] for d in inside))} in "
-                            f"{sum(int(d['n']) for d in inside):,} transfers"
-                            + (f". Largest flow out to an unflagged account: {money_md(exits[0][0])} to "
-                               f"`{exits[0][1]}`, worth checking as a possible cash-out point." if exits else "."))
-                row = wl[wl.acct == acct].iloc[0]
-                why = [r.strip() for r in str(row.reasons or "").split(";") if r.strip()]
-                bullets = "\n".join(f"- {r}" for r in why) if why else "- Channel risk only"
-                st.markdown(f"**Why {me} was flagged**\n\n{bullets}")
-                if has_split:
-                    st.markdown("**Account half:** " + (
-                        "graded. Its own labels were never used to build the scorecard."
-                        if row["split"] == "holdout" else
-                        "learning. Its labels helped set the points per red flag; its score still comes only "
-                        "from its own money-flow patterns."))
-                table = pd.DataFrame([{
-                    "account": n,
-                    "rank": int(rank[n]) if n in rank else None,
-                    "risk score": round(risk[n] * 100, 1) if n in risk else None,
-                    "red flags": (flag_tags(rows[n], limit=9) or "channel risk") if n in risk else "not flagged",
-                    f"money with {me}": "selected account" if n == acct else flows(n, short=True),
-                    "_usd": sum(g.edges[e]["usd"] for e in ((acct, n), (n, acct)) if g.has_edge(*e)),
-                } for n in nodes])
-                table = pd.concat([table[table.account == acct],
-                                   table[(table.account != acct) & table["rank"].notna()].sort_values("rank"),
-                                   table[table["rank"].isna()].sort_values("_usd", ascending=False)])
-                st.markdown(f"**Accounts in this money trail** ({len(nodes)})")
-                st.dataframe(table.drop(columns="_usd"), hide_index=True, width="stretch", height=300,
-                             column_config={"rank": st.column_config.NumberColumn("rank", format="#%d")})
         sp = load("q2_signal_precision", variant)
         pc = load("q2_pattern_coverage", variant)
         c1, c2 = st.columns(2)
