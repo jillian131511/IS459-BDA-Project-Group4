@@ -14,7 +14,7 @@ class _St(types.ModuleType):
     def __getattr__(self, n):
         if n == "cache_data":
             return lambda *a, **k: (a[0] if a and callable(a[0]) else (lambda f: f))
-        if n == "tabs": return lambda names: [_Any() for _ in names]
+        if n == "tabs": return lambda names, **k: [_Any() for _ in names]
         if n == "columns": return lambda spec, **k: [_Any() for _ in range(spec if isinstance(spec, int) else len(spec))]
         if n == "selectbox": return lambda label, options, **k: list(options)[0]
         if n == "slider": return lambda label, lo, hi, val, *a, **k: val

@@ -24,14 +24,14 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | `dashboard/app.py`, `infra/launch_serving_ec2.sh` | Streamlit dashboard (Athena mode or local mode) and the serving EC2 that runs it next to Kafka | EC2 / laptop |
 | `infra/create_roles.sh`, `infra/setup.sh`, `infra/teardown.sh` | Pipeline IAM role (normal accounts only), one-shot deploy (idempotent), full clean-up | CloudShell |
 | `local/` | Synthetic data generator in the exact Kaggle format + local runners (SQLite) | laptop |
-| `tests/test_pipeline.py` | End-to-end local test suite (10 tests) | laptop |
+| `tests/test_pipeline.py` | End-to-end local test suite (11 tests) | laptop |
 | `docs/` | `decisions.md` (every decision made while running on AWS, with evidence), design rationale, rubric checklist, demo + video scripts | – |
 
 ## Quick start
 
 ### 0  Test locally (no AWS, ~1 minute)
 ```bash
-pip install -r requirements.txt             # streamlit>=1.49 is needed for the dashboard's click-through
+pip install -r requirements.txt             # streamlit>=1.65 is needed for the dashboard's click-through
 python -m unittest tests/test_pipeline.py -v
 python local/make_synthetic_data.py --out data/raw --variant SYN-Small
 python local/etl_local.py --trans data/raw/SYN-Small_Trans.csv --patterns data/raw/SYN-Small_Patterns.txt --variant SYN-Small

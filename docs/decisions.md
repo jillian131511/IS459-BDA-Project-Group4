@@ -3,6 +3,16 @@
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 BQ1 / BQ2 are the two business questions (channels / networks), named as on the dashboard.
 
+## 2026-11-08 · Bank routes ranked by the Wilson lower bound; heatmap states its coverage
+
+The per-bank route chart ranked routes by raw lift, so a route with 1 laundering transfer in 50 (20x) beat one with
+500 in 50,000 (10x). It now ranks by the 95 % Wilson lower bound, the same rule as the monitoring rules (the
+proposal's "worst-to-first, held back until there's enough to be sure"); bars show that cautious lift, labels the
+raw lift. The heatmap picks banks by laundered value and colours cells by risk; its caption now says so and states
+the share of laundered value its cells carry (44 % on SYN-Small; the rest is reachable in the per-bank tab). Each
+route view has a CSV button below it, like the other heatmaps (the grid's routes, one bank's routes, all routes),
+and clicking a heatmap cell switches to that bank's route chart.
+
 ## 2026-11-08 · Checked against the Week 9 proposal: bank-route heatmap added, full 1,000-account watchlist
 
 The proposal promised a heatmap by bank-to-bank route and a 1,000-account watchlist. The dashboard had only a
@@ -30,7 +40,7 @@ evidence ("How the watchlist is scored and graded"), captioned as unaffected by 
 Clicking a node in the money-trail graph, or a row in the watchlist table, opens that account's trail, as long as
 it is in the top 300 (the accounts with published trails) and matches the watchlist search and graded-half filter;
 otherwise a note says why and the selection stays. Graph clicks are ported from the `dashboard-bq1-heatmaps` branch.
-Needs Streamlit 1.49+ (chart and table selection events).
+Needs Streamlit 1.65+ (chart and table selection events; keyed tabs so a heatmap click opens the route chart).
 
 Two bugs fixed on the way, both when the graded-half filter removes the selected account: the dropdown kept showing
 the old account while the graph moved on (the picker is now set explicitly), and the table's tick stayed on the

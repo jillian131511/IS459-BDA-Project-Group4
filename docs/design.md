@@ -14,7 +14,9 @@ Lecture references point to the IS459 decks in the Project knowledge base, as *W
   lists **every** segment that fits inside the chosen budget, in risk order, under a header that states the count
   (e.g. "Monitoring rules at this budget · 76 segments"), so the rule set to deploy is complete, not a top-N excerpt.
   Heatmaps show lift by payment format × currency, by day × hour, and by bank-to-bank route (the 20 banks sending
-  × the 20 receiving the most laundered value; click a cell to drill into that sender's routes).
+  × the 20 receiving the most laundered value; click a cell to open that sender's routes; the caption states the share of laundered value the grid covers).
+  Each bank's routes are ranked worst-to-first by the 95 % Wilson lower bound, like the rules, and every
+  qualifying route can be downloaded as a CSV.
 
 **BQ2 · Which accounts form laundering networks, and why?**
 * Beneficiary: financial-crime investigators deciding which accounts to escalate.

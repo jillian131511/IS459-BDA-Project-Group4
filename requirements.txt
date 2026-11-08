@@ -3,6 +3,6 @@ pandas>=2.0
 numpy
 networkx
 boto3
-streamlit>=1.49
+streamlit>=1.65
 plotly>=5.18
 kafka-python>=2.0.3
