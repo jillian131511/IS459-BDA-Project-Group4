@@ -22,7 +22,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from architecture import architecture_svg  # noqa: E402  (theme-aware pipeline diagram)
-from presentation import corridor_preview, ranked_lift_data  # noqa: E402
+from presentation import corridor_preview, ranked_lift_data, route_risk, routes_export  # noqa: E402
 
 MODE = os.environ.get("DATA_MODE", "local")
 BUCKET = os.environ.get("BUCKET", "")
@@ -477,10 +477,14 @@ with tab_q1:
                        help="Every day-and-hour slot, riskiest first, with exact counts and rates.")
         bc = load("q1_bank_corridors", variant)
         if not bc.empty:
-            bc = bc.assign(from_bank=bc.from_bank.astype(str), to_bank=bc.to_bank.astype(str))
+            bc = route_risk(bc.assign(from_bank=bc.from_bank.astype(str), to_bank=bc.to_bank.astype(str)))
             st.subheader("Bank-to-bank routes")
             st.caption(f"{len(bc):,} cross-bank routes with at least 50 transfers and at least one laundering "
                        "transfer. Routes below that bar are left out, so a missing route does not mean no activity.")
+            csv_button(routes_export(bc), f"Download all {len(bc):,} bank-to-bank routes (CSV)",
+                       f"{variant}_bank_routes_all.csv",
+                       help="Every qualifying route, riskiest first by the 95% Wilson lower bound, with counts, "
+                            "rates, lift and USD values.")
             sent = bc.groupby("from_bank").laundered_usd.sum().sort_values(ascending=False)
             senders = sent.index.tolist()
             sender_key = f"corridor_sender_{variant}"
@@ -532,10 +536,13 @@ with tab_q1:
                     fig.update_layout(clickmode="event+select")
                     st.plotly_chart(fig, width="stretch", theme=None, key=heat_key,
                                     on_select=open_heat_sender, selection_mode="points")
-                    st.caption(f"Rows: the {len(top_s)} banks sending the most laundered value; columns: the "
-                               f"{len(top_r)} receiving the most. Each cell is one route's lift; numbers mark 10x or "
-                               "more. Blank means that route is below the bar above, not that no money moved. Click a "
-                               "cell to see all routes from its sender bank.")
+                    share = cells.laundered_usd.sum() / max(bc.laundered_usd.sum(), 1e-9)
+                    st.caption(f"Banks are chosen by volume, colour shows risk: rows are the {len(top_s)} banks sending "
+                               f"the most laundered value, columns the {len(top_r)} receiving the most, and each cell is "
+                               f"one route's lift (numbers mark 10x or more). These {len(cells):,} routes carry "
+                               f"**{share:.0%} of the laundered value** on qualifying routes; pick any bank in the next "
+                               "tab for the rest. Blank means that route is below the bar above, not that no money "
+                               "moved. Click a cell to see all routes from its sender bank.")
             with t_risk:
 
                 def open_receiver_as_sender():
@@ -559,26 +566,32 @@ with tab_q1:
                                       help="Banks are listed by laundered value sent; type to search for a bank id.")
                 routes, n_routes = corridor_preview(bc, sender, max_routes=15)
                 ylabels = [f"to bank {b}" for b in routes.to_bank]
+                # bar = lift at the 95% Wilson lower bound, so bar length and order agree and a route with one
+                # lucky laundering transfer cannot top the list (same ranking idea as the monitoring rules)
                 fig = go.Figure(go.Bar(
-                    y=ylabels, x=routes.lift, orientation="h", marker=dict(color=T["s1"]), width=0.6,
+                    y=ylabels, x=routes.lb_lift, orientation="h", marker=dict(color=T["s1"]), width=0.6,
                     customdata=routes.to_bank.tolist(),
-                    text=[f"{r.lift:.1f}x · {int(r.n_txn):,} transfers" for r in routes.itertuples()],
+                    text=[f"at least {r.lb_lift:.1f}x · raw {r.lift:.1f}x · {int(r.n_txn):,} transfers"
+                          for r in routes.itertuples()],
                     textposition="outside", cliponaxis=False, constraintext="none",
                     textfont=dict(color=T["ink"], size=13),
-                    hovertext=[f"Bank {sender} → bank {r.to_bank}<br>lift {r.lift:.1f}x<br>{int(r.n_txn):,} transfers, "
+                    hovertext=[f"Bank {sender} → bank {r.to_bank}<br>lift {r.lift:.1f}x (at least {r.lb_lift:.1f}x "
+                               f"at the 95% lower bound)<br>{int(r.n_txn):,} transfers, "
                                f"{int(r.n_laundering):,} laundering ({r.laundering_rate * 100:.2f}%)<br>"
                                f"laundered {money(r.laundered_usd)}<br><i>click to open bank {r.to_bank} as sender</i>"
                                for r in routes.itertuples()], hoverinfo="text"))
-                fig.update_xaxes(title="risk lift (times the overall laundering rate)", showgrid=True,
-                                 gridcolor=T["grid"], range=[0, float(routes.lift.max()) * 1.45 or 1], ticksuffix="x")
+                fig.update_xaxes(title="risk lift at the 95% lower bound (times the overall laundering rate)",
+                                 showgrid=True, gridcolor=T["grid"], range=[0, float(routes.lb_lift.max()) * 1.9 or 1],
+                                 ticksuffix="x")
                 fig.update_yaxes(type="category", autorange="reversed", showgrid=False)
                 fig.update_layout(clickmode="event+select")
                 st.plotly_chart(style(fig, height=90 + 34 * len(routes), legend=False), width="stretch", theme=None,
                                 key=route_chart_key, on_select=open_receiver_as_sender, selection_mode="points")
                 st.caption(f"{'All' if n_routes <= 15 else f'Top {len(routes)} of'} {n_routes:,} route"
-                           f"{'s' if n_routes != 1 else ''} from bank {sender}, highest lift first. Check the transfer "
-                           "count before trusting a high lift. Click a bar to follow the money to that bank.")
-                csv_button(ranked_lift_data(bc[bc.from_bank == sender], ["from_bank", "to_bank"]),
+                           f"{'s' if n_routes != 1 else ''} from bank {sender}, ranked worst-to-first by the 95% Wilson "
+                           "lower bound, like the monitoring rules: the bar is the lift we can be confident of, the "
+                           "label also shows the raw lift. Click a bar to follow the money to that bank.")
+                csv_button(routes_export(bc[bc.from_bank == sender]),
                            f"Download all {n_routes:,} routes from bank {sender} (CSV)",
                            f"{variant}_routes_from_bank_{sender}.csv")
             with t_value:
@@ -594,9 +607,7 @@ with tab_q1:
                                    "laundered_usd": st.column_config.NumberColumn("laundered (USD)", format="compact"),
                                    "rate": st.column_config.NumberColumn("laundering rate", format="%.2f%%"),
                                    "lift": st.column_config.NumberColumn("lift", format="%.1fx")})
-                st.caption(f"Top 15 of {len(top):,} routes by laundered value.")
-                csv_button(top.assign(laundering_rate_pct=top.laundering_rate * 100).drop(columns="laundering_rate"),
-                           f"Download all {len(top):,} routes (CSV)", f"{variant}_bank_routes_all.csv")
+                st.caption(f"Top 15 of {len(top):,} routes by laundered value. Every route is in the CSV above.")
 
 # ----------------------------------------------------------------------------------------------- BQ2
 with tab_q2:

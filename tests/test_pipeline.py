@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(ROOT, "streaming"))
 from patterns_parser import parse_patterns_text  # noqa: E402
 from monitor_core import RiskModel, amount_band  # noqa: E402
 sys.path.insert(0, os.path.join(ROOT, "dashboard"))
-from presentation import corridor_preview, ranked_lift_data  # noqa: E402
+from presentation import corridor_preview, ranked_lift_data, route_risk, routes_export, wilson_lower_bound  # noqa: E402
 
 
 def sh(*args):
@@ -39,6 +39,22 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(exported.lift.tolist(), [20, 5, 3, 2])
         self.assertEqual(exported.rank_by_lift.tolist(), [1, 2, 3, 4])
         self.assertTrue((exported.laundering_rate_pct == 10).all())
+
+    def test_route_ranking_uses_wilson_lower_bound(self):
+        self.assertAlmostEqual(float(wilson_lower_bound(1, 50)), 0.0035, places=4)     # same formula as the SQL
+        self.assertAlmostEqual(float(wilson_lower_bound(500, 50000)), 0.0092, places=4)
+        # one lucky laundering transfer in 50 has the higher raw lift but must rank below 500 in 50,000
+        data = pd.DataFrame({"from_bank": ["1", "1"], "to_bank": ["2", "3"], "n_txn": [50, 50000],
+                             "n_laundering": [1, 500], "usd_volume": [1e4, 1e7], "laundered_usd": [100, 1e5]})
+        data = data.assign(laundering_rate=data.n_laundering / data.n_txn,
+                           lift=data.n_laundering / data.n_txn / 0.001)
+        scored = route_risk(data)
+        routes, total = corridor_preview(scored, sender="1")
+        self.assertEqual(routes.to_bank.tolist(), ["3", "2"])
+        self.assertTrue((scored.lb_lift < scored.lift).all())                          # cautious <= raw
+        export = routes_export(scored)
+        self.assertEqual(export.to_bank.tolist(), ["3", "2"])
+        self.assertEqual(export.rank_by_risk.tolist(), [1, 2])
 
     @classmethod
     def setUpClass(cls):
