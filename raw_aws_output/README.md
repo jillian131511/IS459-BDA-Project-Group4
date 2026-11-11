@@ -1,19 +1,43 @@
 # Raw AWS evidence
 
 Records saved from AWS before teardown, behind the figures quoted in the README, `docs/` and the slides.
-Collected with `infra/collect_evidence.sh` unless noted. Times inside the files are UTC (Singapore = UTC+8).
+Collected with `bash infra/collect_evidence.sh <label>` unless noted. One folder per AWS account.
+Times inside the files are UTC (Singapore = UTC+8).
 
-| Folder / file | Account | What it backs |
-|---|---|---|
-| `steps_j-*.json`, `cluster_j-*.json`, `run_info_*.json`, `pre_tuning_driver_stdout.gz` (top level) | Learner Lab (465553375598) | Tuning before/after (40 min 10 s → 2 min 56 s; ranking step 669.9 s → 15.9 s), window experiment run times and arguments (1 / 3 / 7 days) |
-| `050752609589/stepfunctions/`, `glue_runs_*.json` | Team | Whole-pipeline times (HI-Large 24 min 8 s on 7 Nov, HI-Small 17 min 17 s on 4 Nov), Glue ETL times |
-| `050752609589/steps_*`, `cluster_*`, `driver_logs/`, `run_info/` | Team | BQ2 EMR step times (HI-Small 2 min 48 s), job timers (178 s / 120 s), thresholds |
-| `050752609589/s3/analytics/q2_*` | Team | BQ2 accuracy (67 %, 18.8 %, 71 %; HI-Small 3.0 %, 2.4 %, 64 %), schemes found (163 of 370) |
-| `050752609589/s3/analytics/q1_*`, `run_log/` | Team | BQ1 capture (76.7 % / 75.0 % at 5 %), segments at 5 % (58 / 45), Athena bytes and cost per query |
-| `050752609589/s3/dq_report/`, `s3/manifests/` | Team | Row counts, duplicates, malformed and FX checks, file md5 |
-| `050752609589/athena/` | Team | Daily volumes and laundering share, self-payments (SQL saved next to each result) |
-| `050752609589/s3/streaming_alerts/`, `ec2_streaming/` | Team | Kafka alerts per run; latest run's speed and latency (300,000 in 96 s, median 64 ms) |
-| `050752609589/screenshots/spark_ui_stages_HI-Small_2026-11-04.png` | Team | Spark UI of the tuned HI-Small run (4 Nov 12:43 UTC): 92 completed, **104 skipped** stages (skipped = output already available, so Spark did not recompute it) |
-| `050752609589/screenshots/cost_explorer_2026-11-07.png` | Team | Cost on 7 Nov, the recorded HI-Large run day: **USD 3.78** for the whole account, serving EC2 included |
+```
+raw_aws_output/
+  learner-lab_465553375598/   first account: tuning before/after, 1 / 3 / 7-day window experiment (4 Nov)
+  team_050752609589/          team account: official HI-Small (4 Nov) and HI-Large (4 and 7 Nov) runs
+```
+
+Inside each account folder, files keep the names AWS gives them:
+`steps_<cluster>.json` (EMR steps, arguments, start/end), `cluster_<cluster>.json`, `driver_logs/<cluster>/…/stdout.gz`
+(Spark driver output with per-step timings), `run_info/` (BQ2 parameters and step seconds), `stepfunctions/`,
+`glue_runs_<job>.json`, `s3/` (pipeline outputs as written to S3), `athena/` (query + result), `ec2_streaming/`
+(serving EC2's Kafka logs), `screenshots/` (taken by hand in the console).
+
+## Learner Lab (`learner-lab_465553375598/`)
+
+| File | Backs |
+|---|---|
+| `steps_j-06704321A7T11TFRQMW0.json`, `driver_logs/j-06704321A7T11TFRQMW0/stdout.gz` | Before tuning: BQ2 step 40 min 10 s; ranking step 669.9 s of 931.8 s |
+| `steps_j-066507029D365FFVM9BN.json`, `run_info/analytics/HI-Small.json` | After tuning: BQ2 step 2 min 56 s; ranking step 15.9 s |
+| `steps_j-01028977DXQQ53H5QK5.json`, `run_info/experiments/w1, w3, w7.json` | Window experiment: `--window-days 1 / 3 / 7`, path-join 9.5 / 11.3 / 15.7 s, job totals 120.7 / 124.1 / 129.7 s |
+
+Not collected from this account: the window experiment's precision and schemes-found for 1 and 7 days.
+
+## Team account (`team_050752609589/`)
+
+| Folder / file | Backs |
+|---|---|
+| `stepfunctions/`, `glue_runs_*.json` | Whole pipeline: HI-Large 24 min 8 s (7 Nov), HI-Small 17 min 17 s (4 Nov); Glue ETL 7 min 45 s |
+| `steps_*`, `cluster_*`, `driver_logs/`, `run_info/` | BQ2 EMR step HI-Small 2 min 48 s; job timers 178 s / 120 s; thresholds |
+| `s3/analytics/q2_*` | BQ2 accuracy (67 %, 18.8 %, 71 %; HI-Small 3.0 %, 2.4 %, 64 %), schemes found (163 of 370) |
+| `s3/analytics/q1_*`, `s3/analytics/run_log/` | BQ1 capture (76.7 % / 75.0 % at 5 %), segments at 5 % (58 / 45), Athena bytes and cost per query |
+| `s3/dq_report/`, `s3/manifests/` | Row counts, duplicates, malformed and FX checks, file md5 |
+| `athena/` | Daily volumes and laundering share, self-payments |
+| `s3/streaming_alerts/`, `ec2_streaming/` | Kafka alerts per run; latest run (8 Nov): 300,000 in 96 s, median 64 ms; 190 hubs (consumer log) |
+| `screenshots/spark_ui_stages_HI-Small_2026-11-04.png` | Spark UI of the tuned HI-Small run (4 Nov 12:43 UTC): 92 completed, **104 skipped** stages (skipped = output already available, so Spark did not recompute it) |
+| `screenshots/cost_explorer_2026-11-07.png` | Cost on 7 Nov, the recorded HI-Large run day: **USD 3.78** for the whole account, serving EC2 included |
 
 Screenshots were taken by hand in the AWS console (11 Nov 2026).

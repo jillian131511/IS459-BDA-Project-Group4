@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # Saves the AWS records behind the numbers we quote (run times, accuracy results, data quality, Athena counts,
-# streaming logs) into raw_aws_output/<account id>/, so the evidence survives infra/teardown.sh. It changes no
+# streaming logs) into raw_aws_output/<label>_<account id>/, so the evidence survives infra/teardown.sh. It changes no
 # pipeline resource; it only adds two Athena result files and a copy of the serving EC2's logs to the bucket
 # (athena-results/, evidence/ec2/), which teardown deletes with the bucket. The Athena counts scan a few columns
 # (cents on HI-Large).
 # Run it once per AWS account that ran the pipeline, BEFORE teardown (teardown deletes the bucket, the state
 # machine's execution history and the Glue job run history). EMR keeps terminated clusters for about 2 months.
 #
-#   bash infra/collect_evidence.sh [created-after date, default 2026-10-01]
+#   bash infra/collect_evidence.sh <label> [created-after date, default 2026-10-01]
+#   label: which account this is, e.g. team or learner-lab  ->  raw_aws_output/team_050752609589/
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source infra/config.env
 export AWS_PAGER=""
-SINCE="${1:-2026-10-01}"
+LABEL="${1:?usage: bash infra/collect_evidence.sh <label: team | learner-lab> [created-after date]}"
+SINCE="${2:-2026-10-01}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-OUT="raw_aws_output/$ACCOUNT_ID"
+OUT="raw_aws_output/${LABEL}_${ACCOUNT_ID}"
 mkdir -p "$OUT"
 echo "saving to $OUT"
 

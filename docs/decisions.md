@@ -101,7 +101,7 @@ Historical replay, superseded by the 8 Nov ordering fix (HI-Small from 8 Sep 00:
 rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
 inflate the alert precision on the Live monitor tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
 the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. (The 875 and 5 are in the alerts
-saved from S3, `raw_aws_output/050752609589/s3/streaming_alerts/`; the run's timing log was not kept.) The whole-day figure above
+saved from S3, `raw_aws_output/team_050752609589/s3/streaming_alerts/`; the run's timing log was not kept.) The whole-day figure above
 (2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
 
 ## 2026-11-04 · Speed layer works; the velocity rule is too noisy (fixed above)
@@ -116,7 +116,7 @@ and were not kept.)
 **Latest measurement (8 Nov 21:03, after the ordering fix, same t3.large).** HI-Small from 8 Sep 00:00, 300,000
 transfers in 96 s (about 3,100 a second), median delay from transfer to alert 64 ms, 95th percentile 151 ms;
 3,071 alerts (1.0 % of transfers), 3.6 % of them truly laundering. Source: the serving EC2's producer and consumer
-logs, `raw_aws_output/050752609589/ec2_streaming/`. Quote these; the 4 Nov figures above are kept for the record.
+logs, `raw_aws_output/team_050752609589/ec2_streaming/`. Quote these; the 4 Nov figures above are kept for the record.
 
 Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 54 laundering = 0.058 %):
 
@@ -126,7 +126,7 @@ Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 5
 | Hot channel + watchlist rules | 765 | 11 |
 | All rules | 8,676 (9.3 % of transfers) | 17 (0.20 %, about 3x random); 17 of 54 laundering transfers caught |
 
-(Recounted from the alerts the consumer wrote to S3, `raw_aws_output/050752609589/s3/streaming_alerts/`, events
+(Recounted from the alerts the consumer wrote to S3, `raw_aws_output/team_050752609589/s3/streaming_alerts/`, events
 dated 8 Sep 00:00-04:03.)
 
 The velocity rule fires mostly on busy ordinary accounts (merchants, payroll) - the "hubs" the batch layer already
