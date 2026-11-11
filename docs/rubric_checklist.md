@@ -2,6 +2,9 @@
 
 Status key: ✅ done (and run on AWS where relevant) · 🔜 still to do on AWS · 👥 needs the team. Updated 8 Nov 2026.
 
+**Evidence for every AWS figure:** [`raw_aws_output/README.md`](../raw_aws_output/README.md) (raw AWS records and
+console screenshots, organised by claim and by pipeline stage).
+
 **8 Nov review qualifications:** the Kafka timestamp-ordering fix has passed a local regression test and was
 verified on EC2 by a fresh replay on 8 Nov 21:03 (300,000 events in 96 s, timestamp ordered; `raw_aws_output/team_050752609589/ec2_streaming/`).
 No batch rerun is needed for that fix. The dashboard's budget optimiser selects a Wilson-ranked prefix and

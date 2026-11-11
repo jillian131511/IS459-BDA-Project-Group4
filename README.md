@@ -26,6 +26,8 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | `local/` | Synthetic data generator in the exact Kaggle format + local runners (SQLite) | laptop |
 | `tests/test_pipeline.py` | End-to-end local test suite (11 tests) | laptop |
 | `docs/` | `decisions.md` (every decision made while running on AWS, with evidence), design rationale, rubric checklist, demo + video scripts | – |
+| [`raw_aws_output/`](raw_aws_output/README.md) | **AWS evidence**: raw records exported from AWS and console screenshots behind every AWS figure, by claim and by pipeline stage | – |
+| `infra/collect_evidence.sh` | Saves those records from an AWS account before teardown | CloudShell |
 
 ## Quick start
 
@@ -110,7 +112,11 @@ are reported separately (`docs/decisions.md`).
 Tuning evidence (HI-Small): checkpointing cut the BQ2 EMR step from 40 min to under 3 min (ranking step
 670 s -> 16 s); with only the checkpoint switch changed, a local run went from 593 s to 40 s with an identical
 watchlist. Window evidence: 1 -> 3 days lifts same-days precision by more than half (8.7 % -> 13.7 %); 3 -> 7 days
-adds 0.4 points and costs 39 % more path-join time. Raw AWS records: `raw_aws_output/`.
+adds 0.4 points and costs 39 % more path-join time.
+
+**Evidence.** Every AWS figure above is backed by a raw record or a console screenshot in
+[`raw_aws_output/`](raw_aws_output/README.md): a claim-by-claim table first, then the screenshots by pipeline stage
+(S3, Glue, Step Functions, Athena, EMR / Spark, Kafka, dashboard, cost).
 
 ## Design highlights
 * **Portable SQL, tested locally.** BQ1 SQL runs unchanged in Athena and SQLite; BQ2 SQL runs unchanged in Spark SQL and SQLite, so the exact logic deployed was tested on a laptop first.
