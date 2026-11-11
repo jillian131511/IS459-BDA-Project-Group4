@@ -85,8 +85,10 @@ on the learning days; 190 accounts in HI-Small, published by the BQ2 job to `ana
 threshold is 11 distinct payees in 24 h instead of 8.
 **How it was chosen.** On a replay of **7 Sep** (a learning day) with hubs excluded, the threshold where the
 velocity rule itself scores best (F1) was 11 — also the batch layer's own data-driven fan-out threshold.
-**Measured once on 8 Sep** (grading day; 482,771 transfers, 539 laundering = 0.112 %), whole day, same scoring code
-as the Kafka consumer (`streaming/monitor_core.py`):
+**Measured once on 8 Sep with the local replay** (`local/replay_local.py`; grading day; 482,771 transfers, 539
+laundering = 0.112 %), whole day, same scoring code as the Kafka consumer (`streaming/monitor_core.py`). This is a
+local measurement, not an AWS run; the live EC2 runs use the same "after" settings (consumer log: velocity k=11,
+190 hubs excluded):
 
 | Live rules | Alerts | Share of transfers | Precision | vs random | Laundering transfers caught |
 |---|---|---|---|---|---|
