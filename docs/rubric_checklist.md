@@ -22,7 +22,7 @@ not a replacement for the fourth X factor. See `docs/decisions.md` for the imple
 | One or more end-to-end AWS pipelines, ingestion to visualisation (s6) | `ingestion/` → `glue/` → `athena/` → `emr/` → `dashboard/`, orchestrated by `stepfunctions/`. HI-Small (17 min 17 s, 4 Nov) and HI-Large (24 min 8 s, 7 Nov) run end to end on AWS; dashboard and Kafka on the serving EC2 | ✅ |
 | Architecture diagram per pipeline (s6) | `docs/architecture_light.png` / `architecture_dark.png` (batch + speed layer in one diagram; theme-aware in the dashboard) | ✅ |
 | No Marketplace; avoid Redshift, RDS, QuickSight (s6) | Athena + S3 + Streamlit; nothing purchased | ✅ |
-| Budget USD 250 (s6) | Team account; on 7 Nov, the HI-Large run day, the whole account cost USD 3.78 including the serving EC2 (Cost Explorer screenshot in `raw_aws_output/`); per-query cost log in `analytics/run_log/` | ✅ / 🔜 |
+| Budget USD 250 (s6) | Team account; on 7 Nov, the HI-Large run day, the whole account cost USD 3.78 including the serving EC2, and USD 18.12 for 1-11 Nov (Cost Explorer screenshots in `raw_aws_output/`); per-query cost log in `analytics/run_log/` | ✅ / 🔜 |
 | Week 9 pitch: questions, beneficiaries, pain points, pipeline, storage, processing, analyses, expected output, draft diagram (s8) | Deck slides 2-12 | ✅ |
 | All members present at both pitches; every member demos one component in Week 13 (s8-9) | Owners per component in `docs/demo_and_video_scripts.md` §0 | 👥 |
 | Individual contributions slide (s9) | Week 13 deck | 👥 |

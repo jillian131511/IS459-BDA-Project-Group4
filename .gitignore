@@ -4,3 +4,7 @@ infra/config.env
 __pycache__/
 *.pyc
 .DS_Store
+
+# Unredacted screenshots (browser bookmarks / profile visible); the committed copies end in _redacted.png
+raw_aws_output/team_050752609589/screenshots/dashboard_bq1_HI-Large.png
+raw_aws_output/team_050752609589/screenshots/dashboard_bq2_money_trail.png
