@@ -1,6 +1,6 @@
 # Rubric and brief checklist (IS459 Project brief, G2)
 
-Status key: ✅ done (and run on AWS where relevant) · 🔜 still to do on AWS · 👥 needs the team. Updated 8 Nov 2026.
+Status key: ✅ done (and run on AWS where relevant) · 🔜 still to do on AWS · 👥 needs the team. Updated 11 Nov 2026.
 
 **Evidence for every AWS figure:** [`raw_aws_output/README.md`](../raw_aws_output/README.md) (raw AWS records and
 console screenshots, organised by claim and by pipeline stage).
@@ -32,7 +32,7 @@ not a replacement for the fourth X factor. See `docs/decisions.md` for the imple
 | Video: set up pipeline end-to-end, narrated (s7) | `docs/demo_and_video_scripts.md` §2 | 🔜 |
 | Video: run pipeline end-to-end, narrated (s7) | `docs/demo_and_video_scripts.md` §3 | 🔜 |
 | Videos on YouTube, linked in appendix; source code uploaded / linked (s7) | GitHub repo + appendix slide | 👥 |
-| Delete all AWS resources after Week 13 (s9) | `infra/teardown.sh` | ✅ |
+| Delete all AWS resources after Week 13 (s9) | `infra/teardown.sh`, after `infra/collect_evidence.sh` has saved the evidence; script ready, run after the presentation | 🔜 |
 
 ## Grading rubric → how we aim for A+
 | Rubric line | What A+ needs | Our evidence |

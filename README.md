@@ -87,6 +87,7 @@ logs in `raw_aws_output/team_050752609589/ec2_streaming/`).
 
 ### 5  After Week 13
 ```bash
+bash infra/collect_evidence.sh team   # first: save the AWS records behind our figures (once per account)
 bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR, EC2 instances tagged Project=aml-g2,
                               # the aml-serving security group, and the role/profile made by create_roles.sh
 ```
