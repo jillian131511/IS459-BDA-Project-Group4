@@ -84,9 +84,11 @@ and consumer state; no batch rerun is needed. The ordering fix is locally tested
 
 ### 5  After Week 13
 ```bash
-bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR; then terminate EC2 instances
+bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR, EC2 instances tagged Project=aml-g2,
+                              # the aml-serving security group, and the role/profile made by create_roles.sh
 ```
-Also delete the pipeline role (`aml-pipeline-role`, `aml-pipeline-profile`) and any IAM access keys made for the project.
+Delete any IAM access keys made for the project by hand. The account-wide EMR default roles and Learner Lab's
+`LabRole` are left alone on purpose.
 
 ## Results (official runs, team AWS account)
 
