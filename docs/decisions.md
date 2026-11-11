@@ -73,8 +73,8 @@ same row number, now a different account (the tick is cleared whenever the accou
 ## 2026-11-08 · BQ1 lists every monitoring rule inside the budget
 
 The alert-budget optimiser used to show only the first 25 segments that fit the chosen review budget, while the
-"Segments to monitor" figure counted all of them (e.g. 76 at 5 %). The table now lists every segment inside the
-budget, under a heading that states the count ("Monitoring rules at this budget · 76 segments"). The slider and
+"Segments to monitor" figure counted all of them (e.g. 58 at 5 % on HI-Large). The table now lists every segment inside the
+budget, under a heading that states the count ("Monitoring rules at this budget · 58 segments"). The slider and
 everything it drives sit in one box; the heatmaps and bank routes below are labelled as covering all transfers,
 independent of the budget.
 
@@ -85,7 +85,7 @@ on the learning days; 190 accounts in HI-Small, published by the BQ2 job to `ana
 threshold is 11 distinct payees in 24 h instead of 8.
 **How it was chosen.** On a replay of **7 Sep** (a learning day) with hubs excluded, the threshold where the
 velocity rule itself scores best (F1) was 11 — also the batch layer's own data-driven fan-out threshold.
-**Measured once on 8 Sep** (grading day; 482,773 transfers, 539 laundering = 0.112 %), whole day, same scoring code
+**Measured once on 8 Sep** (grading day; 482,771 transfers, 539 laundering = 0.112 %), whole day, same scoring code
 as the Kafka consumer (`streaming/monitor_core.py`):
 
 | Live rules | Alerts | Share of transfers | Precision | vs random | Laundering transfers caught |
@@ -114,9 +114,12 @@ Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 5
 
 | Rule | Alerts | Truly laundering |
 |---|---|---|
-| Velocity (paid 8+ different accounts in 24 h) | 8,075 | 6 |
-| Hot channel + watchlist rules | about 780 | 11 |
-| All rules | 8,857 (9.5 % of transfers) | 17 (0.19 %, about 3x random); 17 of 54 laundering transfers caught |
+| Velocity (paid 8+ different accounts in 24 h) | 7,911 | 6 |
+| Hot channel + watchlist rules | 765 | 11 |
+| All rules | 8,676 (9.3 % of transfers) | 17 (0.20 %, about 3x random); 17 of 54 laundering transfers caught |
+
+(Recounted from the alerts the consumer wrote to S3, `raw_aws_output/050752609589/s3/streaming_alerts/`, events
+dated 8 Sep 00:00-04:03.)
 
 The velocity rule fires mostly on busy ordinary accounts (merchants, payroll) - the "hubs" the batch layer already
 leaves out of its fan-out flags. **Not tuned on these results**, because that would tune on the grading days.
@@ -126,8 +129,8 @@ learning day (7 Sep), then measure once on 8 Sep.
 ## 2026-11-04 · HI-Large is run in full (the pitch's 180 million transfers)
 
 The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run instead of HI-Medium. It has the
-same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of a few hundred to a
-few thousand transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
+same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of 2 to 2,192
+transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
 (1 Aug - 7 Oct), official grading on the rest (8 Oct - 5 Nov), tail reported separately.
 Resources: Glue with 10 G.1X workers (7 min 45 s), EMR 9 x m5.2xlarge (BQ2 compute 159 s; the 7 Nov re-run, same parameters and results, 178 s). Before the run the
 watchlist-edges step was rewritten from an OR join (a nested loop: about 30 billion comparisons at this size) to two

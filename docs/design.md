@@ -12,7 +12,7 @@ Lecture references point to the IS459 decks in the Project knowledge base, as *W
   laundering caught when segments are monitored in risk order); time-of-week profile; bank-to-bank corridors.
 * Output: alert-budget optimiser ("we can review X % of transfers, which rules catch the most?"). The dashboard
   lists **every** segment that fits inside the chosen budget, in risk order, under a header that states the count
-  (e.g. "Monitoring rules at this budget · 76 segments"), so the rule set to deploy is complete, not a top-N excerpt.
+  (e.g. "Monitoring rules at this budget · 58 segments" on HI-Large), so the rule set to deploy is complete, not a top-N excerpt.
   Heatmaps show lift by payment format × currency, by day × hour, and by bank-to-bank route (the 20 banks sending
   × the 20 receiving the most laundered value; click a cell to open that sender's routes; the caption states the share of laundered value the grid covers).
   Each bank's routes are ranked worst-to-first by the 95 % Wilson lower bound, like the rules, and every

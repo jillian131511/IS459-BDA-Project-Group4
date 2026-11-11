@@ -1,0 +1,1 @@
+{"events": 300000, "alerts": 3071, "alert_rate": 0.010236666666666666, "alert_precision": 0.035818951481602086, "latency_ms_p50": 64.3, "latency_ms_p95": 150.5, "updated_at": 1794382645.6489835}
