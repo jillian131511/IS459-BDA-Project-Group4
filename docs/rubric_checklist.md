@@ -29,9 +29,9 @@ not a replacement for the fourth X factor. See `docs/decisions.md` for the imple
 | Week 9 pitch: questions, beneficiaries, pain points, pipeline, storage, processing, analyses, expected output, draft diagram (s8) | Deck slides 2-12 | ✅ |
 | All members present at both pitches; every member demos one component in Week 13 (s8-9) | Owners per component in `docs/demo_and_video_scripts.md` §0 | 👥 |
 | Individual contributions slide (s9) | Week 13 deck | 👥 |
-| Video: set up pipeline end-to-end, narrated (s7) | `docs/demo_and_video_scripts.md` §2 | 🔜 |
-| Video: run pipeline end-to-end, narrated (s7) | `docs/demo_and_video_scripts.md` §3 | 🔜 |
-| Videos on YouTube, linked in appendix; source code uploaded / linked (s7) | GitHub repo + appendix slide | 👥 |
+| Video: set up pipeline end-to-end, narrated (s7) | Video A: https://youtu.be/x9koywMroGc (script: `docs/demo_and_video_scripts.md` §2) | ✅ |
+| Video: run pipeline end-to-end, narrated (s7) | Video B: https://youtu.be/OkbqynVcpYI (HI-Large run of 7 Nov UTC; script: §3) | ✅ |
+| Videos on YouTube, linked in appendix; source code uploaded / linked (s7) | Both videos on YouTube and linked from the README; GitHub repo; appendix slide still to add the links | 👥 |
 | Delete all AWS resources after Week 13 (s9) | `infra/teardown.sh`, after `infra/collect_evidence.sh` has saved the evidence; script ready, run after the presentation | 🔜 |
 
 ## Grading rubric → how we aim for A+

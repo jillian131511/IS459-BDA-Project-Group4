@@ -33,6 +33,8 @@ Back-up: if a live step stalls, play the recorded clip of that step and narrate.
 
 ## 2 · Video A: "Set up the pipeline end-to-end" (6-8 min, narrated) — Member 2, in the team account
 
+Published: https://youtu.be/x9koywMroGc
+
 The resources already exist, so every command below **updates** them (all scripts are safe to re-run).
 **Do not run `teardown.sh` afterwards** — it would delete the team's data and results.
 
@@ -77,6 +79,8 @@ The resources already exist, so every command below **updates** them (all script
    the serving EC2 (30 s).
 
 ## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records an HI-Large run
+
+Published: https://youtu.be/OkbqynVcpYI
 
 **Before the Kafka recording (done 8 Nov):** the updated `streaming/producer.py` was deployed to
 `/opt/aml/streaming/producer.py` on the serving EC2 and verified by a replay at 21:03 (300,000 events in 96 s,
