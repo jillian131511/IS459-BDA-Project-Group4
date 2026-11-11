@@ -89,7 +89,7 @@ The full batch execution in step 1 is part of the end-to-end video, not a prereq
 1. Step Functions → `aml-pipeline` → **Start execution**, input
    `{"variant":"HI-Large","core_nodes":8,"instance_type":"m5.2xlarge","run_benchmark":true,"train_until":"2022-10-08","test_until":"2022-11-06","window_days":"3"}`;
    narrate each state as it turns green, speed up the waiting (3 min). The run takes about 24 min and
-   costs about USD 2; it rewrites the same official results, so the numbers stay the same.
+   costs under USD 4 (Cost Explorer, 7 Nov: USD 3.78 for the whole account that day, serving EC2 included); it rewrites the same official results, so the numbers stay the same.
 2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Large' ORDER BY risk_rank LIMIT 10` and
    `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Large' ORDER BY period, k` (1 min).
 3. Dashboard: BQ1 tab (slider) and BQ2 tab (watchlist, money trail) (2 min).

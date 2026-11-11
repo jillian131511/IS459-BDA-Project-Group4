@@ -100,7 +100,8 @@ it is kept for the schemes those rules cannot see yet.
 Historical replay, superseded by the 8 Nov ordering fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer then skipped
 rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
 inflate the alert precision on the Live monitor tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
-the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. The whole-day figure above
+the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. (The 875 and 5 are in the alerts
+saved from S3, `raw_aws_output/050752609589/s3/streaming_alerts/`; the run's timing log was not kept.) The whole-day figure above
 (2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
 
 ## 2026-11-04 · Speed layer works; the velocity rule is too noisy (fixed above)
@@ -109,6 +110,13 @@ Kafka (KRaft, 3 partitions) and the dashboard run on one t3.large (`infra/launch
 HI-Small from the first grading day (8 Sep), 100,000 transfers in 285 s (about 350 a second), median delay from
 transfer to alert 25 ms at low load and about 0.2 s at full speed. A few later-dated rows sit early in the raw
 file; the producer then capped its pauses. This behaviour was superseded by the 8 Nov ordering fix.
+(These 4 Nov speed figures come from the run's console output at the time; its logs were overwritten by later runs
+and were not kept.)
+
+**Latest measurement (8 Nov 21:03, after the ordering fix, same t3.large).** HI-Small from 8 Sep 00:00, 300,000
+transfers in 96 s (about 3,100 a second), median delay from transfer to alert 64 ms, 95th percentile 151 ms;
+3,071 alerts (1.0 % of transfers), 3.6 % of them truly laundering. Source: the serving EC2's producer and consumer
+logs, `raw_aws_output/050752609589/ec2_streaming/`. Quote these; the 4 Nov figures above are kept for the record.
 
 Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 54 laundering = 0.058 %):
 
