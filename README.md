@@ -9,6 +9,9 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | **BQ1** | Where should the AML monitoring team spend its limited review capacity? | Transaction-monitoring analysts, Head of AML Compliance | Segment risk (lift + Wilson lower bound), capture curve, **alert-budget optimiser** (lists every segment to monitor at the chosen budget, with the count), heatmaps by format × currency, day × hour and bank route |
 | **BQ2** | Which accounts form laundering networks, and why? | Financial-crime investigators | Graph motifs (fan-in/out, 2–4-hop cycles, scatter-gather, gather-scatter), **explainable weight-of-evidence scorecard**, top-1,000 watchlist with reasons, money-trail explorer |
 
+**Videos:** [A · set up the pipeline end-to-end](https://youtu.be/x9koywMroGc) · [B · run the pipeline end-to-end (HI-Large)](https://youtu.be/OkbqynVcpYI) ·
+**Evidence:** [AWS records and screenshots behind every figure](raw_aws_output/README.md)
+
 ![architecture](docs/architecture_light.png)
 
 ## Repository map
@@ -26,6 +29,8 @@ An end-to-end big data pipeline on the IBM Transactions for Anti-Money-Launderin
 | `local/` | Synthetic data generator in the exact Kaggle format + local runners (SQLite) | laptop |
 | `tests/test_pipeline.py` | End-to-end local test suite (11 tests) | laptop |
 | `docs/` | `decisions.md` (every decision made while running on AWS, with evidence), design rationale, rubric checklist, demo + video scripts | – |
+| [`raw_aws_output/`](raw_aws_output/README.md) | **AWS evidence**: raw records exported from AWS and console screenshots behind every AWS figure, by claim and by pipeline stage | – |
+| `infra/collect_evidence.sh` | Saves those records from an AWS account before teardown | CloudShell |
 
 ## Quick start
 
@@ -80,20 +85,24 @@ The replay starts at the first official grading day, so the stream only contains
 The producer reads the source and sorts the selected interval on temporary disk before sending; allow time and
 disk space for preparation. The event limit applies after sorting, and no out-of-order events are dropped.
 After updating an existing server's `/opt/aml/streaming/producer.py`, rerun `run_live_demo.sh` for a fresh topic
-and consumer state; no batch rerun is needed. The ordering fix is locally tested; EC2 verification is pending.
+and consumer state; no batch rerun is needed. The ordering fix is deployed and verified on EC2 (8 Nov 21:03 replay: 300,000 events in 96 s, timestamp ordered;
+logs in `raw_aws_output/team_050752609589/ec2_streaming/`).
 
 ### 5  After Week 13
 ```bash
-bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR; then terminate EC2 instances
+bash infra/collect_evidence.sh team   # first: save the AWS records behind our figures (once per account)
+bash infra/teardown.sh        # deletes bucket, Glue, Step Functions, EMR, EC2 instances tagged Project=aml-g2,
+                              # the aml-serving security group, and the role/profile made by create_roles.sh
 ```
-Also delete the pipeline role (`aml-pipeline-role`, `aml-pipeline-profile`) and any IAM access keys made for the project.
+Delete any IAM access keys made for the project by hand. The account-wide EMR default roles and Learner Lab's
+`LabRole` are left alone on purpose.
 
 ## Results (official runs, team AWS account)
 
 Learn on the first 70 % of the normal days, grade on the remaining 30 %; the tail days (almost all laundering)
 are reported separately (`docs/decisions.md`).
 
-| What | HI-Large (179.7M rows, 97 days) | HI-Small (5.1M rows, 10 days) |
+| What | HI-Large (179.7M rows; 97 normal days + 68-day tail) | HI-Small (5.1M rows; 10 normal days + 8-day tail) |
 |---|---|---|
 | Learn / grade | 1 Aug - 7 Oct / 8 Oct - 5 Nov 2022 | 1 - 7 Sep / 8 - 10 Sep 2022 |
 | Data quality | 0 malformed, 150 duplicates, 0 rows without an FX rate | 0 malformed, 9 duplicates, 0 without FX |
@@ -101,17 +110,22 @@ are reported separately (`docs/decisions.md`).
 | BQ2 official, top 100 accounts | **67 %** vs 4.7 % at random | 3.0 % vs 0.45 % at random |
 | BQ2 official, top 1,000 accounts | **18.8 %** (4x random) | 2.4 % (5x random) |
 | BQ2 same days, top 100 | 71 % | 64 % |
-| BQ2 compute (Spark) | 159 s on 9 x m5.2xlarge | 124 s on 3 x m5.xlarge |
-| Whole pipeline, one click | 21 min (Glue 6 min with 10 workers) | 16 min |
+| BQ2 compute (Spark job timer) | 178 s on 9 x m5.2xlarge (7 Nov) | 120 s on 3 x m5.xlarge (4 Nov) |
+| Whole pipeline, one click (Step Functions) | 24 min 8 s (7 Nov; Glue ETL 7 min 45 s with 10 workers) | 17 min 17 s (4 Nov) |
 
-Tuning evidence (HI-Small): checkpointing cut BQ2 on EMR from 44 to about 3.6 minutes with an identical
-watchlist. Window evidence: 1 -> 3 days nearly doubles same-days precision; 3 -> 7 days adds 0.4 points and costs
-39 % more path-join time.
+Tuning evidence (HI-Small): checkpointing cut the BQ2 EMR step from 40 min to under 3 min (ranking step
+670 s -> 16 s); with only the checkpoint switch changed, a local run went from 593 s to 40 s with an identical
+watchlist. Window evidence: 1 -> 3 days lifts same-days precision by more than half (8.7 % -> 13.7 %); 3 -> 7 days
+adds 0.4 points and costs 39 % more path-join time.
+
+**Evidence.** Every AWS figure above is backed by a raw record or a console screenshot in
+[`raw_aws_output/`](raw_aws_output/README.md): a claim-by-claim table first, then the screenshots by pipeline stage
+(S3, Glue, Step Functions, Athena, EMR / Spark, Kafka, dashboard, cost).
 
 ## Design highlights
 * **Portable SQL, tested locally.** BQ1 SQL runs unchanged in Athena and SQLite; BQ2 SQL runs unchanged in Spark SQL and SQLite, so the exact logic deployed was tested on a laptop first.
 * **Graded on the future.** Scorecard weights are learned on half the accounts (split on the 2nd-to-last character of the account id) and only from the learning days; the official precision is measured on the other half, on later days. BQ1 segment-risk features use labels from all accounts in the learning period, so the account holdout is not fully label-independent. The streaming demo replays days the batch layer never saw.
-* **Tuned with evidence.** Heavy Spark steps are checkpointed, which cut BQ2 from 44 to about 3.6 minutes with an identical result; the 3-day window is backed by a 1/3/7-day experiment.
+* **Tuned with evidence.** Heavy Spark steps are checkpointed, which cut the BQ2 EMR step from 40 min to under 3 min; the 3-day window is backed by a 1/3/7-day experiment.
 * **Statistically honest ranking.** BQ1 ranks segments by the 95 % Wilson lower bound, so tiny lucky segments cannot top the list.
   The dashboard's "alert-budget optimiser" selects a prefix of this ranking, not a guaranteed maximum-capture combination; capture is measured on the analysed historical period.
 * **Explainable by design.** Every watchlist account carries plain-English reasons; no black-box model.

@@ -1,0 +1,142 @@
+[
+    {
+        "Id": "jr_8f898f6e734f89e096e54fa3a261ec15ff751f804463486ed489e2950244b3c2",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-07T17:52:46.737000+00:00",
+        "End": "2026-11-07T17:53:39.368000+00:00",
+        "ExecutionTime": 47,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Large",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_f35070e96c3b76ec9e8712dc890677a67d1b5ee1343c249af137048d4189eb25",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-07T17:51:47.358000+00:00",
+        "End": "2026-11-07T17:52:25.416000+00:00",
+        "ExecutionTime": 32,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Large",
+            "--TRAIN_UNTIL": "2022-10-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_4cb9f8707ab0fd026f12fbc1f4ff2062f701f756adea45cb107358747927b50e",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T13:24:10.133000+00:00",
+        "End": "2026-11-04T13:25:06.387000+00:00",
+        "ExecutionTime": 51,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Large",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_d1fac30f9d26790d83f7fe87def337680c2ba7daa09e0383c26ff71e01838a76",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T13:23:03.789000+00:00",
+        "End": "2026-11-04T13:23:48.854000+00:00",
+        "ExecutionTime": 38,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Large",
+            "--TRAIN_UNTIL": "2022-10-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_5fe76a64106ae17e9761d2b2ecf7eb2aa7091eea22a1d7346d9d0978e4531a54",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:35:05.683000+00:00",
+        "End": "2026-11-04T12:35:49.510000+00:00",
+        "ExecutionTime": 39,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_cfc96301c98e1cbc3d4a033087d52d74f92b0a638d79d4c3890cfe9c3c384c9a",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:34:09.326000+00:00",
+        "End": "2026-11-04T12:34:39.401000+00:00",
+        "ExecutionTime": 23,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_d9573054f02d1ceda148a04b98877f884092368f95cbfbf8d47f269a8e0c0376",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:24:20.707000+00:00",
+        "End": "2026-11-04T12:25:04.845000+00:00",
+        "ExecutionTime": 39,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_9b7a7c61e27af02c72f60efa00611606b202466cae8a748e1d92d3728225d1f9",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:23:18.272000+00:00",
+        "End": "2026-11-04T12:23:48.568000+00:00",
+        "ExecutionTime": 23,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_0c2b86aa89639e08f221708206603593ad0528ee924120b254bf4b036dda0928",
+        "State": "STOPPED",
+        "Start": "2026-11-04T12:17:31.470000+00:00",
+        "End": "2026-11-04T12:18:17.893000+00:00",
+        "ExecutionTime": 27,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_1215244ca1236e3d1d5a9fd08b168d02fbcefa6e8cb99bc6dea20fa65060a5ee",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:16:30.091000+00:00",
+        "End": "2026-11-04T12:17:06.388000+00:00",
+        "ExecutionTime": 29,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-050752609589",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    }
+]

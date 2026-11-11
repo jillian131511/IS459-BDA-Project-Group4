@@ -1,0 +1,4 @@
+{"label": "q1:q1_segment_risk", "query_id": "ebdb5166-f7ec-4043-b453-ffb8752c46fb", "state": "SUCCEEDED", "variant": "SYN-Small", "data_scanned_mb": 1.68, "engine_seconds": 1.42, "cost_usd": 5e-05, "at": "2026-11-04T09:12:16"}
+{"label": "q1:q1_format_currency", "query_id": "9f4b1b6a-a980-40be-95f3-1954834b9659", "state": "SUCCEEDED", "variant": "SYN-Small", "data_scanned_mb": 1.41, "engine_seconds": 1.76, "cost_usd": 5e-05, "at": "2026-11-04T09:12:20"}
+{"label": "q1:q1_time_profile", "query_id": "dbabf5e1-5625-43d5-b479-90b9532e6e4b", "state": "SUCCEEDED", "variant": "SYN-Small", "data_scanned_mb": 0.28, "engine_seconds": 1.41, "cost_usd": 5e-05, "at": "2026-11-04T09:12:22"}
+{"label": "q1:q1_bank_corridors", "query_id": "36fd3dda-ff93-4f06-afe2-cb5eec127618", "state": "SUCCEEDED", "variant": "SYN-Small", "data_scanned_mb": 1.29, "engine_seconds": 0.94, "cost_usd": 5e-05, "at": "2026-11-04T09:12:25"}

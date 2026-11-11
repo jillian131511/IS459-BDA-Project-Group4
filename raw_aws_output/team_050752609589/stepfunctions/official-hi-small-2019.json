@@ -1,0 +1,7 @@
+{
+    "name": "official-hi-small-2019",
+    "status": "FAILED",
+    "start": "2026-11-04T12:19:10.566000+00:00",
+    "stop": "2026-11-04T12:27:07.310000+00:00",
+    "input": "{\"variant\":\"HI-Small\",\"core_nodes\":2,\"run_benchmark\":true,\"train_until\":\"2022-09-08\",\"test_until\":\"2022-09-11\",\"window_days\":\"3\"}"
+}

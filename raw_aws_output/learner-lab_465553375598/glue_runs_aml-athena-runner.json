@@ -1,0 +1,128 @@
+[
+    {
+        "Id": "jr_d2fcde059a2bca9e26eb8763bbae3333065ee031fcea0e8cb732002e17591cc9",
+        "State": "SUCCEEDED",
+        "Start": 1793793217.584,
+        "End": 1793793261.857,
+        "ExecutionTime": 39,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_64413665e3fe52bd03230ad11d22b593466574e7f24f6eaae14a5be05806ad76",
+        "State": "SUCCEEDED",
+        "Start": 1793793161.113,
+        "End": 1793793191.087,
+        "ExecutionTime": 23,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_fc9fcb8c6dbf9fb2bc5722f8479580b248c5a4d17d1d048a0a62a7457f284ee2",
+        "State": "SUCCEEDED",
+        "Start": 1793787770.368,
+        "End": 1793787814.871,
+        "ExecutionTime": 39,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_208ab0f32df71c047380f094c3d5efc694ccc894b1e5e76518788f5af3e0aaad",
+        "State": "SUCCEEDED",
+        "Start": 1793787703.916,
+        "End": 1793787736.394,
+        "ExecutionTime": 25,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "HI-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_a708a345594d80fd93ada8139d7e58d969caeac0b19982ff7a92634384983b8f",
+        "State": "SUCCEEDED",
+        "Start": 1793783581.323,
+        "End": 1793783627.009,
+        "ExecutionTime": 39,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "SYN-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_cc9274c27428ba79e420e04da3f144dc78da016cac54fa61682a47ef601a5823",
+        "State": "SUCCEEDED",
+        "Start": 1793783519.854,
+        "End": 1793783555.578,
+        "ExecutionTime": 28,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "SYN-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_5429a30f3b35db92c4e1927675d5446dbc31a4012b3b3ce8ac9ea70c79132509",
+        "State": "SUCCEEDED",
+        "Start": 1793781292.295,
+        "End": 1793781336.806,
+        "ExecutionTime": 39,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "SYN-Small",
+            "--TRAIN_UNTIL": "none",
+            "--MODE": "benchmark"
+        }
+    },
+    {
+        "Id": "jr_66366f621a7f6be97423bf265ac8d04f4cac9c10192652a56e7c5bd598589888",
+        "State": "SUCCEEDED",
+        "Start": 1793781231.885,
+        "End": 1793781259.694,
+        "ExecutionTime": 21,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "SYN-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    },
+    {
+        "Id": "jr_b3f6a7d06c387868018b591b3aca9dd21555cfeae4264e3b65d6072abfafa4ab",
+        "State": "SUCCEEDED",
+        "Start": 1793780777.265,
+        "End": 1793780808.299,
+        "ExecutionTime": 22,
+        "Workers": null,
+        "Args": {
+            "--BUCKET": "is459-g2-aml-465553375598",
+            "--VARIANT": "SYN-Small",
+            "--TRAIN_UNTIL": "2022-09-08",
+            "--MODE": "q1"
+        }
+    }
+]

@@ -1,0 +1,72 @@
+[
+    {
+        "Id": "jr_8ca4733196aa81c5304e3de5515d4b61bacc83cc95e7aca6c559d3a88a7eb91e",
+        "State": "SUCCEEDED",
+        "Start": 1793792909.269,
+        "End": 1793793040.95,
+        "ExecutionTime": 123,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-465553375598/curated",
+            "--VARIANT": "HI-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-465553375598/raw/transactions/variant=HI-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-465553375598/raw/patterns/variant=HI-Small/"
+        }
+    },
+    {
+        "Id": "jr_a8118b03dcf27a42fcc4cc7a152ececcb4dd3bb1a044726cdbc196160b89883a",
+        "State": "SUCCEEDED",
+        "Start": 1793787351.949,
+        "End": 1793787519.639,
+        "ExecutionTime": 156,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-465553375598/curated",
+            "--VARIANT": "HI-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-465553375598/raw/transactions/variant=HI-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-465553375598/raw/patterns/variant=HI-Small/"
+        }
+    },
+    {
+        "Id": "jr_68ed477ca77e99a315f17a078355a5ff40a278d7e4b2c2a028242e2a4433e3ce",
+        "State": "SUCCEEDED",
+        "Start": 1793783142.687,
+        "End": 1793783295.895,
+        "ExecutionTime": 144,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-465553375598/curated",
+            "--VARIANT": "SYN-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-465553375598/raw/transactions/variant=SYN-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-465553375598/raw/patterns/variant=SYN-Small/"
+        }
+    },
+    {
+        "Id": "jr_2f65ed8e312f492a9376543cf4755a921a0d337000d716b4593b226e34c135fa",
+        "State": "SUCCEEDED",
+        "Start": 1793780903.84,
+        "End": 1793781015.677,
+        "ExecutionTime": 104,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-465553375598/curated",
+            "--VARIANT": "SYN-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-465553375598/raw/transactions/variant=SYN-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-465553375598/raw/patterns/variant=SYN-Small/"
+        }
+    },
+    {
+        "Id": "jr_b1b2f35fefdf192afa708a7d0efb7e46c529c5260db6f89270694b4f00bdc889",
+        "State": "SUCCEEDED",
+        "Start": 1793780592.575,
+        "End": 1793780704.102,
+        "ExecutionTime": 104,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-465553375598/curated",
+            "--VARIANT": "SYN-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-465553375598/raw/transactions/variant=SYN-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-465553375598/raw/patterns/variant=SYN-Small/"
+        }
+    }
+]

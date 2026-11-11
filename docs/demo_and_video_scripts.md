@@ -33,6 +33,8 @@ Back-up: if a live step stalls, play the recorded clip of that step and narrate.
 
 ## 2 · Video A: "Set up the pipeline end-to-end" (6-8 min, narrated) — Member 2, in the team account
 
+Published: https://youtu.be/x9koywMroGc
+
 The resources already exist, so every command below **updates** them (all scripts are safe to re-run).
 **Do not run `teardown.sh` afterwards** — it would delete the team's data and results.
 
@@ -78,9 +80,11 @@ The resources already exist, so every command below **updates** them (all script
 
 ## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records an HI-Large run
 
-**Before the Kafka recording:** deploy the updated `streaming/producer.py` to
-`/opt/aml/streaming/producer.py` on the existing serving EC2. The 8 Nov ordering fix is locally tested, not yet
-verified on EC2. Step 4 below resets the topic and starts a fresh consumer; this producer-only update does not
+Published: https://youtu.be/OkbqynVcpYI
+
+**Before the Kafka recording (done 8 Nov):** the updated `streaming/producer.py` was deployed to
+`/opt/aml/streaming/producer.py` on the serving EC2 and verified by a replay at 21:03 (300,000 events in 96 s,
+timestamp ordered; `raw_aws_output/team_050752609589/ec2_streaming/`). To redeploy after a later change, follow the same steps. Step 4 below resets the topic and starts a fresh consumer; this producer-only update does not
 require step 1 or a batch rerun. Record a new live clip and fresh alert/latency measurements. The producer first
 reads the entire source and sorts the selected interval on temporary disk, so allow preparation time and disk
 space before alerts begin. It keeps all selected events and applies the event limit after chronological sorting.
@@ -88,8 +92,8 @@ The full batch execution in step 1 is part of the end-to-end video, not a prereq
 
 1. Step Functions → `aml-pipeline` → **Start execution**, input
    `{"variant":"HI-Large","core_nodes":8,"instance_type":"m5.2xlarge","run_benchmark":true,"train_until":"2022-10-08","test_until":"2022-11-06","window_days":"3"}`;
-   narrate each state as it turns green, speed up the waiting (3 min). The run takes about 21 min and
-   costs about USD 2; it rewrites the same official results, so the numbers stay the same.
+   narrate each state as it turns green, speed up the waiting (3 min). The run takes about 24 min and
+   costs under USD 4 (Cost Explorer, 7 Nov: USD 3.78 for the whole account that day, serving EC2 included); it rewrites the same official results, so the numbers stay the same.
 2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Large' ORDER BY risk_rank LIMIT 10` and
    `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Large' ORDER BY period, k` (1 min).
 3. Dashboard: BQ1 tab (slider) and BQ2 tab (watchlist, money trail) (2 min).
@@ -108,10 +112,11 @@ README and the appendix slide.
   BQ1 segment-risk features use labels from all learning-period accounts, so the account holdout is not fully
   label-independent. Future-day evaluation is the stronger evidence. We also
   found and fixed a split that graded only 3 % of accounts (`docs/decisions.md`).
-* **Why 3 days?** Measured: 1 -> 3 days nearly doubles precision and finds the most laundering attempts; 3 -> 7 adds
+* **Why 3 days?** Measured: 1 -> 3 days lifts precision by more than half (8.7 % -> 13.7 %) and finds the most laundering attempts; 3 -> 7 adds
   0.4 points and costs 39 % more path-join time.
-* **What did tuning change?** Checkpointing the heavy Spark steps: BQ2 went from 44 to about 3.6 minutes with an
-  identical watchlist (Week 10 loop: observe, hypothesise, change one thing, measure).
+* **What did tuning change?** Checkpointing the heavy Spark steps: the BQ2 EMR step went from 40 min to under
+  3 min, and the ranking step from 670 s to 16 s (Week 10 loop: observe, hypothesise, change, measure). That release
+  also fixed two accuracy issues, so the clean one-variable test is local: 593 s -> 40 s, identical watchlist.
 * **Why Wilson lower bound?** A segment with 1 laundering case out of 2 has a 50 % raw rate but tells us almost
   nothing; the lower bound ranks by risk we are statistically confident about.
 * **How would this run in production?** Daily files land in `raw/`, an EventBridge schedule starts the same state

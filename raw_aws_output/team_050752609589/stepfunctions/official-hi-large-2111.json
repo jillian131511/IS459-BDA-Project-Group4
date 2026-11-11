@@ -1,0 +1,7 @@
+{
+    "name": "official-hi-large-2111",
+    "status": "SUCCEEDED",
+    "start": "2026-11-04T13:11:35.082000+00:00",
+    "stop": "2026-11-04T13:35:04.939000+00:00",
+    "input": "{\"variant\":\"HI-Large\",\"core_nodes\":8,\"instance_type\":\"m5.2xlarge\",\"run_benchmark\":true,\"train_until\":\"2022-10-08\",\"test_until\":\"2022-11-06\",\"window_days\":\"3\"}"
+}

@@ -1,0 +1,132 @@
+{
+    "Cluster": {
+        "Id": "j-005430838BMG5XHFOTNI",
+        "Name": "aml-q2-HI-Small",
+        "Status": {
+            "State": "TERMINATED_WITH_ERRORS",
+            "StateChangeReason": {
+                "Code": "VALIDATION_ERROR",
+                "Message": "Service role EMR_DefaultRole has insufficient EC2 permissions. EC2 Message: AmazonEC2Exception: You are not authorized to perform this operation. User: arn:aws:sts::050752609589:assumed-role/EMR_DefaultRole/ElasticMapReduceSession is not authorized to perform: ec2:CreateSecurityGroup on resource: arn:aws:ec2:us-east-1:050752609589:vpc/vpc-012b410a6d68b3ff4 because no identity-based policy allows the ec2:CreateSecurityGroup action. Encoded authorization failure message: WP-R__GbIhxKVgawmR9r_AEAuBvbVe2P2ETq6EfJDlWh8huDwf4M9WlHvhXhgxgr3GDhMWzE6l_h66K_raNRyqmP1lfysPArGs2eqk1oyvrbaNEFSFdbdFAC3DntTgXVRnB1DyOVImJJTYVf0dr_4mWC6gFvqgdQNjMDPZSku4B-uY-iH1WxG01ygT4hpUmafwV6S5tDhy3kUkzUpxPFpJJibhH7n0xhGs7bY3JqEIZc_5fuO1M7t5oPogy3EkuSXD5efpmw4r3pxFL2PCyQgvOWlQxg7YV5ZhJ0ujWfNmIjhua1DLfPuomyv00vAcqmoLx6TC801YvSiHjOgDCKKOzfDB2zKcNkfWEeJOggn92S1VU3w_Y9QvMPZmCnq11fxXiGoeOUxGVmKiS4_7C8HjfAVovz5qkdgv4gcEgRxMFkaoJTf4EP4SMHAzY_Te4fIdlF24G0r0k0TQtblRrMGRZSI5fOKBH4sbl6aReGFzUbLp3w9zt71-71Tcdvojqz3avbEuovAExCOD7nWwlmI7VKTZ6hr8uTmsvnsroTG-tocBNv4y4ABnC2vHW-i_6G1Nqis4xZ5UiLgNh9-5ZTIgw9dvZ6 (Service: AmazonEC2; Status Code: 403; Error Code: UnauthorizedOperation; Request ID: 1fbeeb40-6cd5-4f06-8549-c4dec94e4858; Proxy: null)"
+            },
+            "Timeline": {
+                "CreationDateTime": "2026-11-04T12:24:20.675000+00:00",
+                "EndDateTime": "2026-11-04T12:26:34.538000+00:00"
+            }
+        },
+        "Ec2InstanceAttributes": {
+            "RequestedEc2SubnetIds": [],
+            "RequestedEc2AvailabilityZones": [],
+            "IamInstanceProfile": "EMR_EC2_DefaultRole"
+        },
+        "InstanceCollectionType": "INSTANCE_GROUP",
+        "LogUri": "s3n://is459-g2-aml-050752609589/emr-logs/",
+        "ReleaseLabel": "emr-7.5.0",
+        "AutoTerminate": false,
+        "TerminationProtected": false,
+        "UnhealthyNodeReplacement": true,
+        "VisibleToAllUsers": true,
+        "Applications": [
+            {
+                "Name": "Spark",
+                "Version": "3.5.2"
+            }
+        ],
+        "Tags": [
+            {
+                "Key": "Project",
+                "Value": "aml-g2"
+            },
+            {
+                "Key": "for-use-with-amazon-emr-managed-policies",
+                "Value": "true"
+            }
+        ],
+        "ServiceRole": "EMR_DefaultRole",
+        "NormalizedInstanceHours": 0,
+        "Configurations": [],
+        "ScaleDownBehavior": "TERMINATE_AT_TASK_COMPLETION",
+        "KerberosAttributes": {},
+        "ClusterArn": "arn:aws:elasticmapreduce:us-east-1:050752609589:cluster/j-005430838BMG5XHFOTNI",
+        "StepConcurrencyLevel": 1,
+        "PlacementGroups": [],
+        "OSReleaseLabel": "2023.12.20261026.1",
+        "SessionEnabled": false,
+        "BootstrapActions": [],
+        "InstanceGroups": [
+            {
+                "Id": "ig-02399731T3BABEW8JNF1",
+                "Name": "Primary",
+                "Market": "ON_DEMAND",
+                "InstanceGroupType": "MASTER",
+                "InstanceType": "m5.xlarge",
+                "RequestedInstanceCount": 1,
+                "RunningInstanceCount": 0,
+                "Status": {
+                    "State": "TERMINATED",
+                    "StateChangeReason": {
+                        "Code": "CLUSTER_TERMINATED",
+                        "Message": "Job flow terminated"
+                    },
+                    "Timeline": {
+                        "CreationDateTime": "2026-11-04T12:24:20.696000+00:00",
+                        "EndDateTime": "2026-11-04T12:26:34.518000+00:00"
+                    }
+                },
+                "Configurations": [],
+                "ConfigurationsVersion": 0,
+                "EbsBlockDevices": [
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        }
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        }
+                    }
+                ],
+                "ShrinkPolicy": {}
+            },
+            {
+                "Id": "ig-03874883CU9EFRN89UUX",
+                "Name": "Core",
+                "Market": "ON_DEMAND",
+                "InstanceGroupType": "CORE",
+                "InstanceType": "m5.xlarge",
+                "RequestedInstanceCount": 2,
+                "RunningInstanceCount": 0,
+                "Status": {
+                    "State": "TERMINATED",
+                    "StateChangeReason": {
+                        "Code": "CLUSTER_TERMINATED",
+                        "Message": "Job flow terminated"
+                    },
+                    "Timeline": {
+                        "CreationDateTime": "2026-11-04T12:24:20.696000+00:00",
+                        "EndDateTime": "2026-11-04T12:26:34.518000+00:00"
+                    }
+                },
+                "Configurations": [],
+                "ConfigurationsVersion": 0,
+                "EbsBlockDevices": [
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        }
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        }
+                    }
+                ],
+                "ShrinkPolicy": {}
+            }
+        ]
+    }
+}

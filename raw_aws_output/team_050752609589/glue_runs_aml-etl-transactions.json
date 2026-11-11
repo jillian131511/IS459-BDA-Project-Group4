@@ -1,0 +1,72 @@
+[
+    {
+        "Id": "jr_499edd37580ca1200a4b6bfdeb9d992c72ce13278f40e68ea363353c4b6d640c",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-07T17:40:13.123000+00:00",
+        "End": "2026-11-07T17:48:25.198000+00:00",
+        "ExecutionTime": 465,
+        "Workers": 10,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-050752609589/curated",
+            "--VARIANT": "HI-Large",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-050752609589/raw/transactions/variant=HI-Large/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-050752609589/raw/patterns/variant=HI-Large/"
+        }
+    },
+    {
+        "Id": "jr_e778ebe257992546720f69a8a0dd271e06ce8931e9f53d3f98b27956a67f6535",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T13:11:35.283000+00:00",
+        "End": "2026-11-04T13:19:26.382000+00:00",
+        "ExecutionTime": 465,
+        "Workers": 10,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-050752609589/curated",
+            "--VARIANT": "HI-Large",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-050752609589/raw/transactions/variant=HI-Large/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-050752609589/raw/patterns/variant=HI-Large/"
+        }
+    },
+    {
+        "Id": "jr_416335471d565092ca4ab106b351dcaf9027707ada6a388102c8cc07a5a662b6",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:27:59.750000+00:00",
+        "End": "2026-11-04T12:30:16.365000+00:00",
+        "ExecutionTime": 125,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-050752609589/curated",
+            "--VARIANT": "HI-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-050752609589/raw/transactions/variant=HI-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-050752609589/raw/patterns/variant=HI-Small/"
+        }
+    },
+    {
+        "Id": "jr_691ee0e5d04b29bc8733a2c411d270ada6880100e6d0a815fc8210b76fee4854",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:19:10.772000+00:00",
+        "End": "2026-11-04T12:21:56.304000+00:00",
+        "ExecutionTime": 159,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-050752609589/curated",
+            "--VARIANT": "HI-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-050752609589/raw/transactions/variant=HI-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-050752609589/raw/patterns/variant=HI-Small/"
+        }
+    },
+    {
+        "Id": "jr_390cade8ae0c9e248fd85eb5531482cce6805444c62ce16278603868097958b7",
+        "State": "SUCCEEDED",
+        "Start": "2026-11-04T12:12:19.508000+00:00",
+        "End": "2026-11-04T12:15:08.978000+00:00",
+        "ExecutionTime": 159,
+        "Workers": 4,
+        "Args": {
+            "--CURATED_PATH": "s3://is459-g2-aml-050752609589/curated",
+            "--VARIANT": "HI-Small",
+            "--RAW_TRANS_PATH": "s3://is459-g2-aml-050752609589/raw/transactions/variant=HI-Small/",
+            "--RAW_PATTERNS_PATH": "s3://is459-g2-aml-050752609589/raw/patterns/variant=HI-Small/"
+        }
+    }
+]

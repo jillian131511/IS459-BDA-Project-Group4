@@ -1,0 +1,175 @@
+{
+    "Cluster": {
+        "Id": "j-06869521GB677VL8L4CA",
+        "Name": "aml-q2-HI-Large",
+        "Status": {
+            "State": "TERMINATED",
+            "StateChangeReason": {
+                "Code": "USER_REQUEST",
+                "Message": "Terminated by user request"
+            },
+            "Timeline": {
+                "CreationDateTime": "2026-11-04T13:24:10.067000+00:00",
+                "ReadyDateTime": "2026-11-04T13:28:24.313000+00:00",
+                "EndDateTime": "2026-11-04T13:34:06.561000+00:00"
+            }
+        },
+        "Ec2InstanceAttributes": {
+            "RequestedEc2SubnetIds": [],
+            "Ec2AvailabilityZone": "us-east-1f",
+            "RequestedEc2AvailabilityZones": [],
+            "IamInstanceProfile": "EMR_EC2_DefaultRole",
+            "EmrManagedMasterSecurityGroup": "sg-0198e2754238e8699",
+            "EmrManagedSlaveSecurityGroup": "sg-0519d30f2404e07b9"
+        },
+        "InstanceCollectionType": "INSTANCE_GROUP",
+        "LogUri": "s3n://is459-g2-aml-050752609589/emr-logs/",
+        "ReleaseLabel": "emr-7.5.0",
+        "AutoTerminate": false,
+        "TerminationProtected": false,
+        "UnhealthyNodeReplacement": true,
+        "VisibleToAllUsers": true,
+        "Applications": [
+            {
+                "Name": "Spark",
+                "Version": "3.5.2"
+            }
+        ],
+        "Tags": [
+            {
+                "Key": "Project",
+                "Value": "aml-g2"
+            },
+            {
+                "Key": "for-use-with-amazon-emr-managed-policies",
+                "Value": "true"
+            }
+        ],
+        "ServiceRole": "EMR_DefaultRole",
+        "NormalizedInstanceHours": 144,
+        "MasterPublicDnsName": "ec2-44-197-230-17.compute-1.amazonaws.com",
+        "Configurations": [],
+        "ScaleDownBehavior": "TERMINATE_AT_TASK_COMPLETION",
+        "KerberosAttributes": {},
+        "ClusterArn": "arn:aws:elasticmapreduce:us-east-1:050752609589:cluster/j-06869521GB677VL8L4CA",
+        "StepConcurrencyLevel": 1,
+        "PlacementGroups": [],
+        "OSReleaseLabel": "2023.12.20261026.1",
+        "SessionEnabled": false,
+        "BootstrapActions": [],
+        "InstanceGroups": [
+            {
+                "Id": "ig-04625211BA4SUVTOZYD",
+                "Name": "Primary",
+                "Market": "ON_DEMAND",
+                "InstanceGroupType": "MASTER",
+                "InstanceType": "m5.2xlarge",
+                "RequestedInstanceCount": 1,
+                "RunningInstanceCount": 0,
+                "Status": {
+                    "State": "TERMINATED",
+                    "StateChangeReason": {
+                        "Code": "CLUSTER_TERMINATED",
+                        "Message": "Job flow terminated"
+                    },
+                    "Timeline": {
+                        "CreationDateTime": "2026-11-04T13:24:10.090000+00:00",
+                        "ReadyDateTime": "2026-11-04T13:27:09.773000+00:00",
+                        "EndDateTime": "2026-11-04T13:34:06.525000+00:00"
+                    }
+                },
+                "Configurations": [],
+                "ConfigurationsVersion": 0,
+                "LastSuccessfullyAppliedConfigurations": [],
+                "LastSuccessfullyAppliedConfigurationsVersion": 0,
+                "EbsBlockDevices": [
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sdb"
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sdc"
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sdd"
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sde"
+                    }
+                ],
+                "ShrinkPolicy": {}
+            },
+            {
+                "Id": "ig-08147971GNOVILHTO67R",
+                "Name": "Core",
+                "Market": "ON_DEMAND",
+                "InstanceGroupType": "CORE",
+                "InstanceType": "m5.2xlarge",
+                "RequestedInstanceCount": 8,
+                "RunningInstanceCount": 0,
+                "Status": {
+                    "State": "TERMINATED",
+                    "StateChangeReason": {
+                        "Code": "CLUSTER_TERMINATED",
+                        "Message": "Job flow terminated"
+                    },
+                    "Timeline": {
+                        "CreationDateTime": "2026-11-04T13:24:10.090000+00:00",
+                        "ReadyDateTime": "2026-11-04T13:28:24.313000+00:00",
+                        "EndDateTime": "2026-11-04T13:34:06.525000+00:00"
+                    }
+                },
+                "Configurations": [],
+                "ConfigurationsVersion": 0,
+                "LastSuccessfullyAppliedConfigurations": [],
+                "LastSuccessfullyAppliedConfigurationsVersion": 0,
+                "EbsBlockDevices": [
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sdb"
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sdc"
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sdd"
+                    },
+                    {
+                        "VolumeSpecification": {
+                            "VolumeType": "gp2",
+                            "SizeInGB": 32
+                        },
+                        "Device": "/dev/sde"
+                    }
+                ],
+                "ShrinkPolicy": {}
+            }
+        ]
+    }
+}

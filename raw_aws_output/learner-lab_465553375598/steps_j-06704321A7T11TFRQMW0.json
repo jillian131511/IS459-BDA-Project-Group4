@@ -1,0 +1,23 @@
+[
+    {
+        "Id": "s-0313219KP42LZIXDHQN",
+        "Name": "q2-network-risk",
+        "State": "COMPLETED",
+        "Start": 1793788094.994,
+        "End": 1793790505.302,
+        "Args": [
+            "spark-submit",
+            "--deploy-mode",
+            "cluster",
+            "--py-files",
+            "s3://is459-g2-aml-465553375598/scripts/emr/network_sql.py",
+            "s3://is459-g2-aml-465553375598/scripts/emr/network_risk.py",
+            "--bucket",
+            "is459-g2-aml-465553375598",
+            "--variant",
+            "HI-Small",
+            "--train-until",
+            "2022-09-08"
+        ]
+    }
+]

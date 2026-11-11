@@ -12,7 +12,7 @@ Lecture references point to the IS459 decks in the Project knowledge base, as *W
   laundering caught when segments are monitored in risk order); time-of-week profile; bank-to-bank corridors.
 * Output: alert-budget optimiser ("we can review X % of transfers, which rules catch the most?"). The dashboard
   lists **every** segment that fits inside the chosen budget, in risk order, under a header that states the count
-  (e.g. "Monitoring rules at this budget · 76 segments"), so the rule set to deploy is complete, not a top-N excerpt.
+  (e.g. "Monitoring rules at this budget · 58 segments" on HI-Large), so the rule set to deploy is complete, not a top-N excerpt.
   Heatmaps show lift by payment format × currency, by day × hour, and by bank-to-bank route (the 20 banks sending
   × the 20 receiving the most laundered value; click a cell to open that sender's routes; the caption states the share of laundered value the grid covers).
   Each bank's routes are ranked worst-to-first by the 95 % Wilson lower bound, like the rules, and every
@@ -109,6 +109,6 @@ The consumer reports alert rate, alert precision (from labels, for the demo only
 The Kafka producer sorts the selected interval by event timestamp using temporary SQLite storage before sending.
 Equal-time events retain file order, the event limit applies after sorting, and no far-ahead rows are dropped.
 Preparation reads the entire source and needs temporary disk space. Latency is measured from publication,
-excluding preparation and replay pacing. The ordering fix is tested locally; deployment and a fresh Kafka replay
-are required before reporting updated live measurements. BQ1's budget selector is a Wilson-ranked prefix with
+excluding preparation and replay pacing. The ordering fix is tested locally and verified on EC2 (8 Nov 21:03
+replay, `raw_aws_output/team_050752609589/ec2_streaming/`); the live measurements in `docs/decisions.md` come from that replay. BQ1's budget selector is a Wilson-ranked prefix with
 historical capture, rather than a guaranteed optimal allocation.

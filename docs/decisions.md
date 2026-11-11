@@ -3,7 +3,7 @@
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 BQ1 / BQ2 are the two business questions (channels / networks), named as on the dashboard.
 
-## 2026-11-08 · Kafka replay sorted by event time (local fix; EC2 verification pending)
+## 2026-11-08 · Kafka replay sorted by event time (local fix, verified on EC2 the same evening)
 
 The raw CSV is not strictly chronological. Kafka preserves publication order within a partition, but cannot
 sort event timestamps; the velocity rule's deque requires chronological events per sender. The producer now
@@ -19,6 +19,10 @@ events. This is not an EC2/Kafka validation. Member 6 (Video B / Kafka demo) mus
 and rerun `run_live_demo.sh`, which resets the topic and starts a fresh consumer. No batch rerun is needed.
 Re-measure live alert counts and latency before quoting them for this version; earlier Kafka figures below
 describe the old replay. Consumer latency starts at `produced_at`, excluding replay preparation and pacing.
+
+**EC2 verification (8 Nov 21:03).** The updated producer was deployed to the serving EC2 and `run_live_demo.sh`
+was rerun: "Preparing timestamp-ordered replay", then 300,000 events in 96 s, timestamp ordered, no out-of-order
+rows dropped; median delay 64 ms, p95 151 ms; 3,071 alerts. Logs: `raw_aws_output/team_050752609589/ec2_streaming/`.
 
 Proposal review also identified outstanding qualifications, not implemented fixes: BQ1 selects a prefix of
 Wilson-ranked segments rather than solving a maximum-capture optimisation; its curve is historical capture.
@@ -73,8 +77,8 @@ same row number, now a different account (the tick is cleared whenever the accou
 ## 2026-11-08 · BQ1 lists every monitoring rule inside the budget
 
 The alert-budget optimiser used to show only the first 25 segments that fit the chosen review budget, while the
-"Segments to monitor" figure counted all of them (e.g. 76 at 5 %). The table now lists every segment inside the
-budget, under a heading that states the count ("Monitoring rules at this budget · 76 segments"). The slider and
+"Segments to monitor" figure counted all of them (e.g. 58 at 5 % on HI-Large). The table now lists every segment inside the
+budget, under a heading that states the count ("Monitoring rules at this budget · 58 segments"). The slider and
 everything it drives sit in one box; the heatmaps and bank routes below are labelled as covering all transfers,
 independent of the budget.
 
@@ -85,8 +89,10 @@ on the learning days; 190 accounts in HI-Small, published by the BQ2 job to `ana
 threshold is 11 distinct payees in 24 h instead of 8.
 **How it was chosen.** On a replay of **7 Sep** (a learning day) with hubs excluded, the threshold where the
 velocity rule itself scores best (F1) was 11 — also the batch layer's own data-driven fan-out threshold.
-**Measured once on 8 Sep** (grading day; 482,773 transfers, 539 laundering = 0.112 %), whole day, same scoring code
-as the Kafka consumer (`streaming/monitor_core.py`):
+**Measured once on 8 Sep with the local replay** (`local/replay_local.py`; grading day; 482,771 transfers, 539
+laundering = 0.112 %), whole day, same scoring code as the Kafka consumer (`streaming/monitor_core.py`). This is a
+local measurement, not an AWS run; the live EC2 runs use the same "after" settings (consumer log: velocity k=11,
+190 hubs excluded):
 
 | Live rules | Alerts | Share of transfers | Precision | vs random | Laundering transfers caught |
 |---|---|---|---|---|---|
@@ -100,7 +106,8 @@ it is kept for the schemes those rules cannot see yet.
 Historical replay, superseded by the 8 Nov ordering fix (HI-Small from 8 Sep 00:00, 100,000 transfers in 36 s; the producer then skipped
 rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
 inflate the alert precision on the Live monitor tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
-the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. The whole-day figure above
+the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. (The 875 and 5 are in the alerts
+saved from S3, `raw_aws_output/team_050752609589/s3/streaming_alerts/`; the run's timing log was not kept.) The whole-day figure above
 (2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
 
 ## 2026-11-04 · Speed layer works; the velocity rule is too noisy (fixed above)
@@ -109,14 +116,24 @@ Kafka (KRaft, 3 partitions) and the dashboard run on one t3.large (`infra/launch
 HI-Small from the first grading day (8 Sep), 100,000 transfers in 285 s (about 350 a second), median delay from
 transfer to alert 25 ms at low load and about 0.2 s at full speed. A few later-dated rows sit early in the raw
 file; the producer then capped its pauses. This behaviour was superseded by the 8 Nov ordering fix.
+(These 4 Nov speed figures come from the run's console output at the time; its logs were overwritten by later runs
+and were not kept.)
+
+**Latest measurement (8 Nov 21:03, after the ordering fix, same t3.large).** HI-Small from 8 Sep 00:00, 300,000
+transfers in 96 s (about 3,100 a second), median delay from transfer to alert 64 ms, 95th percentile 151 ms;
+3,071 alerts (1.0 % of transfers), 3.6 % of them truly laundering. Source: the serving EC2's producer and consumer
+logs, `raw_aws_output/team_050752609589/ec2_streaming/`. Quote these; the 4 Nov figures above are kept for the record.
 
 Honest evaluation on the replayed window (8 Sep 00:00-04:03: 93,577 transfers, 54 laundering = 0.058 %):
 
 | Rule | Alerts | Truly laundering |
 |---|---|---|
-| Velocity (paid 8+ different accounts in 24 h) | 8,075 | 6 |
-| Hot channel + watchlist rules | about 780 | 11 |
-| All rules | 8,857 (9.5 % of transfers) | 17 (0.19 %, about 3x random); 17 of 54 laundering transfers caught |
+| Velocity (paid 8+ different accounts in 24 h) | 7,911 | 6 |
+| Hot channel + watchlist rules | 765 | 11 |
+| All rules | 8,676 (9.3 % of transfers) | 17 (0.20 %, about 3x random); 17 of 54 laundering transfers caught |
+
+(Recounted from the alerts the consumer wrote to S3, `raw_aws_output/team_050752609589/s3/streaming_alerts/`, events
+dated 8 Sep 00:00-04:03.)
 
 The velocity rule fires mostly on busy ordinary accounts (merchants, payroll) - the "hubs" the batch layer already
 leaves out of its fan-out flags. **Not tuned on these results**, because that would tune on the grading days.
@@ -126,10 +143,10 @@ learning day (7 Sep), then measure once on 8 Sep.
 ## 2026-11-04 · HI-Large is run in full (the pitch's 180 million transfers)
 
 The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run instead of HI-Medium. It has the
-same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of a few hundred to a
-few thousand transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
+same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of 2 to 2,192
+transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
 (1 Aug - 7 Oct), official grading on the rest (8 Oct - 5 Nov), tail reported separately.
-Resources: Glue with 10 G.1X workers (6 min), EMR 9 x m5.2xlarge (BQ2 compute 159 s). Before the run the
+Resources: Glue with 10 G.1X workers (7 min 45 s), EMR 9 x m5.2xlarge (BQ2 compute 159 s; the 7 Nov re-run, same parameters and results, 178 s). Before the run the
 watchlist-edges step was rewritten from an OR join (a nested loop: about 30 billion comparisons at this size) to two
 equi-joins, with identical output. Official top-1,000 precision 18.8 % against 4.7 % at random.
 
@@ -153,9 +170,11 @@ Precision = share of the top-k holdout accounts that are laundering accounts (20
 | **3 days** | 124.1 s | 11.3 s | **21.8 %** | **13.7 %** | 2.4 % | **163 / 370** |
 | 7 days | 129.7 s | 15.7 s | 22.2 % | 14.1 % | 2.4 % | 157 / 370 |
 
-Random picking: 1.0 % (same days) and 0.45 % (8–10 Sep).
+Random picking: 1.0 % (same days) and 0.45 % (8–10 Sep). Source: the three runs' evaluation and pattern-coverage
+output, `raw_aws_output/learner-lab_465553375598/s3/experiments/` (Learner Lab account).
 
-**Reading.** Going from 1 to 3 days nearly doubles precision on the same days and finds the most laundering
+**Reading.** Going from 1 to 3 days nearly doubles precision on the same days at top 500 (12.0 → 21.8 %; +57 % at
+top 1,000) and finds the most laundering
 attempts. Going from 3 to 7 days adds almost nothing (+0.4 points) and finds fewer attempts (more chance links
 crowd the list), while the path-join step costs 39 % more. So 3 days is where the benefit levels off.
 The window barely changes next-days precision (all ≈5× random): predicting which accounts launder *next* is
@@ -172,14 +191,18 @@ character is evenly spread (≈31,000 accounts per hex digit), so the split now 
 
 ## 2026-11-04 · BQ2 heavy steps are checkpointed, not cached (tuning)
 
-**Observe.** First HI-Small run on EMR (3 × m5.xlarge): the BQ2 step took 44 min; the ranking step
-alone took 670 s of 932 s of step time while doing little real work.
+**Observe.** First HI-Small run on EMR (3 × m5.xlarge, Learner Lab account): the BQ2 step took 40 min 10 s
+(EMR step time); the ranking step alone took 670 s of 932 s of timed step time while doing little real work.
 **Hypothesise.** Each step's query plan carries every earlier step, so Spark spends its time re-planning
 and matching cached plans rather than computing. (Adding *more* caching made it slower, which supports this.)
 **Change one thing.** `--lineage checkpoint`: heavy steps are checkpointed to the cluster's HDFS, which
 saves the result and cuts the plan back to "read this saved table".
 **Measure.** Local SYN-Small, same code, only the switch changed: 593.5 s → 40.0 s, identical watchlist.
-On EMR (HI-Small, 3 × m5.xlarge) the BQ2 step went from 44 min to about 3.6 min, identical watchlist.
+On EMR (HI-Small, 3 × m5.xlarge) the BQ2 step went from 40 min 10 s to 2 min 56 s (EMR step time, about
+14×), and the ranking step from 669.9 s to 15.9 s. The same tuned code later took 2 min 48 s in the team account.
+The EMR before/after is not a one-variable test: the same release also switched to exact thresholds (below) and
+added later-days grading, and the fan-in threshold moved from 25 to 26, so the EMR watchlists are not identical.
+The one-variable evidence is the local run above. Raw AWS records: `raw_aws_output/`.
 
 A second finding on the way: the fan-in/fan-out thresholds used Spark's *approximate* percentile, which
 returned 9, 10 or 11 for the same data depending on layout and changed the watchlist between runs. They now
@@ -193,7 +216,7 @@ activity — only the tails of laundering schemes that started earlier:
 | Days | Transfers per day | Share that is laundering |
 |---|---|---|
 | 1–10 Sep | 200,000 – 1,100,000 | ~0.1 % |
-| 11–18 Sep | 11 – 396 | 50–70 % |
+| 11–18 Sep | 11 – 396 | about 60 % (57–73 % by day) |
 
 (Athena, `aml.transactions`, variant HI-Small, after Glue cleaning.)
 
