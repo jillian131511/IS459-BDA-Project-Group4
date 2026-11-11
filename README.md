@@ -103,17 +103,18 @@ are reported separately (`docs/decisions.md`).
 | BQ2 official, top 100 accounts | **67 %** vs 4.7 % at random | 3.0 % vs 0.45 % at random |
 | BQ2 official, top 1,000 accounts | **18.8 %** (4x random) | 2.4 % (5x random) |
 | BQ2 same days, top 100 | 71 % | 64 % |
-| BQ2 compute (Spark) | 159 s on 9 x m5.2xlarge | 124 s on 3 x m5.xlarge |
-| Whole pipeline, one click | 21 min (Glue 6 min with 10 workers) | 16 min |
+| BQ2 compute (Spark job timer) | 178 s on 9 x m5.2xlarge (7 Nov) | 120 s on 3 x m5.xlarge (4 Nov) |
+| Whole pipeline, one click (Step Functions) | 24 min 8 s (7 Nov; Glue ETL 7 min 45 s with 10 workers) | 17 min 17 s (4 Nov) |
 
-Tuning evidence (HI-Small): checkpointing cut BQ2 on EMR from 44 to about 3.6 minutes with an identical
-watchlist. Window evidence: 1 -> 3 days nearly doubles same-days precision; 3 -> 7 days adds 0.4 points and costs
-39 % more path-join time.
+Tuning evidence (HI-Small): checkpointing cut the BQ2 EMR step from 40 min to under 3 min (ranking step
+670 s -> 16 s); with only the checkpoint switch changed, a local run went from 593 s to 40 s with an identical
+watchlist. Window evidence: 1 -> 3 days lifts same-days precision by more than half (8.7 % -> 13.7 %); 3 -> 7 days
+adds 0.4 points and costs 39 % more path-join time. Raw AWS records: `raw_aws_output/`.
 
 ## Design highlights
 * **Portable SQL, tested locally.** BQ1 SQL runs unchanged in Athena and SQLite; BQ2 SQL runs unchanged in Spark SQL and SQLite, so the exact logic deployed was tested on a laptop first.
 * **Graded on the future.** Scorecard weights are learned on half the accounts (split on the 2nd-to-last character of the account id) and only from the learning days; the official precision is measured on the other half, on later days. BQ1 segment-risk features use labels from all accounts in the learning period, so the account holdout is not fully label-independent. The streaming demo replays days the batch layer never saw.
-* **Tuned with evidence.** Heavy Spark steps are checkpointed, which cut BQ2 from 44 to about 3.6 minutes with an identical result; the 3-day window is backed by a 1/3/7-day experiment.
+* **Tuned with evidence.** Heavy Spark steps are checkpointed, which cut the BQ2 EMR step from 40 min to under 3 min; the 3-day window is backed by a 1/3/7-day experiment.
 * **Statistically honest ranking.** BQ1 ranks segments by the 95 % Wilson lower bound, so tiny lucky segments cannot top the list.
   The dashboard's "alert-budget optimiser" selects a prefix of this ranking, not a guaranteed maximum-capture combination; capture is measured on the analysed historical period.
 * **Explainable by design.** Every watchlist account carries plain-English reasons; no black-box model.

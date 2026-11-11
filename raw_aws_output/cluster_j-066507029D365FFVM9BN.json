@@ -1,0 +1,19 @@
+{
+    "Id": "j-066507029D365FFVM9BN",
+    "Name": "aml-q2-HI-Small",
+    "Release": "emr-7.5.0",
+    "Created": 1793793217.535,
+    "Ended": 1793793845.641,
+    "Nodes": [
+        [
+            "MASTER",
+            "m5.xlarge",
+            1
+        ],
+        [
+            "CORE",
+            "m5.xlarge",
+            2
+        ]
+    ]
+}

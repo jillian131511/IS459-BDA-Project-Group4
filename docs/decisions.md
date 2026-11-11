@@ -129,7 +129,7 @@ The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run ins
 same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of a few hundred to a
 few thousand transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
 (1 Aug - 7 Oct), official grading on the rest (8 Oct - 5 Nov), tail reported separately.
-Resources: Glue with 10 G.1X workers (6 min), EMR 9 x m5.2xlarge (BQ2 compute 159 s). Before the run the
+Resources: Glue with 10 G.1X workers (7 min 45 s), EMR 9 x m5.2xlarge (BQ2 compute 159 s; the 7 Nov re-run, same parameters and results, 178 s). Before the run the
 watchlist-edges step was rewritten from an OR join (a nested loop: about 30 billion comparisons at this size) to two
 equi-joins, with identical output. Official top-1,000 precision 18.8 % against 4.7 % at random.
 
@@ -172,14 +172,18 @@ character is evenly spread (≈31,000 accounts per hex digit), so the split now 
 
 ## 2026-11-04 · BQ2 heavy steps are checkpointed, not cached (tuning)
 
-**Observe.** First HI-Small run on EMR (3 × m5.xlarge): the BQ2 step took 44 min; the ranking step
-alone took 670 s of 932 s of step time while doing little real work.
+**Observe.** First HI-Small run on EMR (3 × m5.xlarge, Learner Lab account): the BQ2 step took 40 min 10 s
+(EMR step time); the ranking step alone took 670 s of 932 s of timed step time while doing little real work.
 **Hypothesise.** Each step's query plan carries every earlier step, so Spark spends its time re-planning
 and matching cached plans rather than computing. (Adding *more* caching made it slower, which supports this.)
 **Change one thing.** `--lineage checkpoint`: heavy steps are checkpointed to the cluster's HDFS, which
 saves the result and cuts the plan back to "read this saved table".
 **Measure.** Local SYN-Small, same code, only the switch changed: 593.5 s → 40.0 s, identical watchlist.
-On EMR (HI-Small, 3 × m5.xlarge) the BQ2 step went from 44 min to about 3.6 min, identical watchlist.
+On EMR (HI-Small, 3 × m5.xlarge) the BQ2 step went from 40 min 10 s to 2 min 56 s (EMR step time, about
+14×), and the ranking step from 669.9 s to 15.9 s. The same tuned code later took 2 min 48 s in the team account.
+The EMR before/after is not a one-variable test: the same release also switched to exact thresholds (below) and
+added later-days grading, and the fan-in threshold moved from 25 to 26, so the EMR watchlists are not identical.
+The one-variable evidence is the local run above. Raw AWS records: `raw_aws_output/`.
 
 A second finding on the way: the fan-in/fan-out thresholds used Spark's *approximate* percentile, which
 returned 9, 10 or 11 for the same data depending on layout and changed the watchlist between runs. They now
@@ -193,7 +197,7 @@ activity — only the tails of laundering schemes that started earlier:
 | Days | Transfers per day | Share that is laundering |
 |---|---|---|
 | 1–10 Sep | 200,000 – 1,100,000 | ~0.1 % |
-| 11–18 Sep | 11 – 396 | 50–70 % |
+| 11–18 Sep | 11 – 396 | about 60 % (57–73 % by day) |
 
 (Athena, `aml.transactions`, variant HI-Small, after Glue cleaning.)
 

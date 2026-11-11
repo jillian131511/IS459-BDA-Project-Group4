@@ -1,0 +1,27 @@
+[
+    {
+        "Id": "s-0317938V1XBGT40ZINK",
+        "Name": "q2-network-risk",
+        "State": "COMPLETED",
+        "Start": "2026-11-04T12:40:25.854000+00:00",
+        "End": "2026-11-04T12:43:14.043000+00:00",
+        "Args": [
+            "spark-submit",
+            "--deploy-mode",
+            "cluster",
+            "--py-files",
+            "s3://is459-g2-aml-050752609589/scripts/emr/network_sql.py",
+            "s3://is459-g2-aml-050752609589/scripts/emr/network_risk.py",
+            "--bucket",
+            "is459-g2-aml-050752609589",
+            "--variant",
+            "HI-Small",
+            "--train-until",
+            "2022-09-08",
+            "--test-until",
+            "2022-09-11",
+            "--window-days",
+            "3"
+        ]
+    }
+]

@@ -88,7 +88,7 @@ The full batch execution in step 1 is part of the end-to-end video, not a prereq
 
 1. Step Functions → `aml-pipeline` → **Start execution**, input
    `{"variant":"HI-Large","core_nodes":8,"instance_type":"m5.2xlarge","run_benchmark":true,"train_until":"2022-10-08","test_until":"2022-11-06","window_days":"3"}`;
-   narrate each state as it turns green, speed up the waiting (3 min). The run takes about 21 min and
+   narrate each state as it turns green, speed up the waiting (3 min). The run takes about 24 min and
    costs about USD 2; it rewrites the same official results, so the numbers stay the same.
 2. Athena: `SELECT * FROM aml.q1_segment_risk WHERE variant='HI-Large' ORDER BY risk_rank LIMIT 10` and
    `SELECT * FROM aml.q2_evaluation_time WHERE variant='HI-Large' ORDER BY period, k` (1 min).
@@ -108,10 +108,11 @@ README and the appendix slide.
   BQ1 segment-risk features use labels from all learning-period accounts, so the account holdout is not fully
   label-independent. Future-day evaluation is the stronger evidence. We also
   found and fixed a split that graded only 3 % of accounts (`docs/decisions.md`).
-* **Why 3 days?** Measured: 1 -> 3 days nearly doubles precision and finds the most laundering attempts; 3 -> 7 adds
+* **Why 3 days?** Measured: 1 -> 3 days lifts precision by more than half (8.7 % -> 13.7 %) and finds the most laundering attempts; 3 -> 7 adds
   0.4 points and costs 39 % more path-join time.
-* **What did tuning change?** Checkpointing the heavy Spark steps: BQ2 went from 44 to about 3.6 minutes with an
-  identical watchlist (Week 10 loop: observe, hypothesise, change one thing, measure).
+* **What did tuning change?** Checkpointing the heavy Spark steps: the BQ2 EMR step went from 40 min to under
+  3 min, and the ranking step from 670 s to 16 s (Week 10 loop: observe, hypothesise, change, measure). That release
+  also fixed two accuracy issues, so the clean one-variable test is local: 593 s -> 40 s, identical watchlist.
 * **Why Wilson lower bound?** A segment with 1 laundering case out of 2 has a 50 % raw rate but tells us almost
   nothing; the lower bound ranks by risk we are statistically confident about.
 * **How would this run in production?** Daily files land in `raw/`, an EventBridge schedule starts the same state

@@ -19,7 +19,7 @@ not a replacement for the fourth X factor. See `docs/decisions.md` for the imple
 |---|---|---|
 | 2 distinct business questions + who benefits and why (s5) | README, `docs/design.md` §1, deck slides 4-5 | ✅ |
 | Extra data allowed if cited (s5) | Not needed: FX implied from the data itself; HI-Small `rows_without_fx_rate` = 0 | ✅ |
-| One or more end-to-end AWS pipelines, ingestion to visualisation (s6) | `ingestion/` → `glue/` → `athena/` → `emr/` → `dashboard/`, orchestrated by `stepfunctions/`. HI-Small (~16 min) and HI-Large (~21 min) run end to end on AWS; dashboard and Kafka on the serving EC2 | ✅ |
+| One or more end-to-end AWS pipelines, ingestion to visualisation (s6) | `ingestion/` → `glue/` → `athena/` → `emr/` → `dashboard/`, orchestrated by `stepfunctions/`. HI-Small (17 min 17 s, 4 Nov) and HI-Large (24 min 8 s, 7 Nov) run end to end on AWS; dashboard and Kafka on the serving EC2 | ✅ |
 | Architecture diagram per pipeline (s6) | `docs/architecture_light.png` / `architecture_dark.png` (batch + speed layer in one diagram; theme-aware in the dashboard) | ✅ |
 | No Marketplace; avoid Redshift, RDS, QuickSight (s6) | Athena + S3 + Streamlit; nothing purchased | ✅ |
 | Budget USD 250 (s6) | Team account; a full HI-Small run costs well under USD 1 after tuning, an HI-Large run about USD 2; per-query cost log in `analytics/run_log/` | ✅ / 🔜 |
