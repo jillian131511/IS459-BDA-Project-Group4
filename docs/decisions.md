@@ -170,9 +170,11 @@ Precision = share of the top-k holdout accounts that are laundering accounts (20
 | **3 days** | 124.1 s | 11.3 s | **21.8 %** | **13.7 %** | 2.4 % | **163 / 370** |
 | 7 days | 129.7 s | 15.7 s | 22.2 % | 14.1 % | 2.4 % | 157 / 370 |
 
-Random picking: 1.0 % (same days) and 0.45 % (8–10 Sep).
+Random picking: 1.0 % (same days) and 0.45 % (8–10 Sep). Source: the three runs' evaluation and pattern-coverage
+output, `raw_aws_output/learner-lab_465553375598/s3/experiments/` (Learner Lab account).
 
-**Reading.** Going from 1 to 3 days nearly doubles precision on the same days and finds the most laundering
+**Reading.** Going from 1 to 3 days nearly doubles precision on the same days at top 500 (12.0 → 21.8 %; +57 % at
+top 1,000) and finds the most laundering
 attempts. Going from 3 to 7 days adds almost nothing (+0.4 points) and finds fewer attempts (more chance links
 crowd the list), while the path-join step costs 39 % more. So 3 days is where the benefit levels off.
 The window barely changes next-days precision (all ≈5× random): predicting which accounts launder *next* is

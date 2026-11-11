@@ -1,0 +1,7 @@
+{
+    "name": "smoke-syn-1705",
+    "status": "SUCCEEDED",
+    "start": 1793783142.428,
+    "stop": 1793785439.055,
+    "input": "{\"variant\":\"SYN-Small\",\"core_nodes\":1,\"run_benchmark\":true,\"train_until\":\"2022-09-08\"}"
+}

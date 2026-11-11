@@ -4,7 +4,8 @@ Every figure in the README, `docs/` and the slides that comes from AWS is backed
 from AWS or a screenshot of the AWS console. Collected on 11 Nov 2026, before teardown, with
 `bash infra/collect_evidence.sh <label>`; screenshots taken by hand.
 
-* **Two AWS accounts.** `learner-lab_465553375598/` is the first (Learner Lab) account, where BQ2 was tuned and
+* **Two AWS accounts.** `learner-lab_465553375598/` is the first (Learner Lab) account, where the pipeline was first
+  built and smoke-tested on synthetic data (SYN-Small), BQ2 was tuned and
   the 1 / 3 / 7-day window experiment ran (4 Nov). `team_050752609589/` is the team account, which ran the
   official HI-Small (4 Nov) and HI-Large (4 and 7 Nov) pipelines.
 * **Time zones.** Raw files are in UTC; the console screenshots show Singapore time (UTC+8). The HI-Large run the
@@ -23,12 +24,12 @@ from AWS or a screenshot of the AWS console. Collected on 11 Nov 2026, before te
 | Parquet scans **247×** less data than CSV (full scan, HI-Large); **10,091×** for one day | [CSV query](team_050752609589/screenshots/athena_benchmark_csv_HI-Large.png), [Parquet query](team_050752609589/screenshots/athena_benchmark_parquet_HI-Large.png), [dashboard](team_050752609589/screenshots/dashboard_cost_performance.png) | `team_…/s3/analytics/run_log/` |
 | Tuning: BQ2 EMR step **40 min 10 s → 2 min 56 s** (Learner Lab), **2 min 48 s** repeated in the team account; ranking step 670 s → 16 s | [EMR step, 2 min 48 s](team_050752609589/screenshots/emr_steps_HI-Small_2026-11-04.png), [checkpoint queries](team_050752609589/screenshots/spark_ui_checkpoint_HI-Small.png), [104 skipped stages](team_050752609589/screenshots/spark_ui_stages_HI-Small_2026-11-04.png) | `learner-lab_…/steps_*.json`, `driver_logs/`, `run_info/` |
 | Scale: BQ2 on HI-Large ran on 9 executors / 60 cores, 10,876 tasks (0 failed), 1.7 h of task time inside a 3 min 46 s step; 18.8 GiB read, 36.7 GiB shuffled | [Spark executors](team_050752609589/screenshots/spark_ui_executors_HI-Large_2026-11-07.png) | `team_…/steps_j-0643721XTYCK3JC3WMQ.json` |
-| Window: only `--window-days` changed; schemes found 142 / **163** / 157 of 370; join step 9.5 / 11.3 / 15.7 s | [experiment steps](learner-lab_465553375598/screenshots/emr_steps_experiments_HI-Small_2026-11-04.jpg), [w1 arguments](learner-lab_465553375598/screenshots/emr_step_w1_arguments.jpg), [w7 arguments](learner-lab_465553375598/screenshots/emr_step_w7_arguments.jpg) | `learner-lab_…/run_info/experiments/` |
+| Window: only `--window-days` changed; same-days top 1,000 precision 8.7 / **13.7** / 14.1 %; schemes found 142 / **163** / 157 of 370; join step 9.5 / 11.3 / 15.7 s | [experiment steps](learner-lab_465553375598/screenshots/emr_steps_experiments_HI-Small_2026-11-04.jpg), [w1 arguments](learner-lab_465553375598/screenshots/emr_step_w1_arguments.jpg), [w7 arguments](learner-lab_465553375598/screenshots/emr_step_w7_arguments.jpg) | `learner-lab_…/s3/experiments/w1, w3, w7/` (evaluation, pattern coverage), `run_info/experiments/` |
 | Kafka live layer: 300,000 events in **96 s**, median **64 ms**, 3,071 alerts (8 Nov) | [Live monitor](team_050752609589/screenshots/dashboard_live_monitor.png), [Kafka topic](team_050752609589/screenshots/ssm_kafka_topic.png) | `team_…/ec2_streaming/` |
 | Cost: **USD 3.78** on the HI-Large run day, **USD 18.12** for 1–11 Nov (budget USD 250) | [7 Nov](team_050752609589/screenshots/cost_explorer_2026-11-07.png), [November](team_050752609589/screenshots/cost_explorer_nov_month.png) | — |
 
-Not backed by a saved AWS record: the window experiment's precision for 1 and 7 days (8.7 % / 14.1 %), quoted from
-that run's evaluation output in `docs/decisions.md`. The 3-day row is backed by the team account's official run.
+Every row of the window-experiment table in `docs/decisions.md` (precision at top 500 / 1,000, next days, schemes
+found, base rates) matches the experiments' own output in `learner-lab_465553375598/s3/experiments/`.
 
 ## Screenshots by pipeline stage
 
@@ -77,8 +78,8 @@ One cluster, three steps that differ only in `--window-days` (1 / 3 / 7); one du
 ![w1 arguments](learner-lab_465553375598/screenshots/emr_step_w1_arguments.jpg)
 ![w7 arguments](learner-lab_465553375598/screenshots/emr_step_w7_arguments.jpg)
 
-Schemes found by the two non-default runs (S3 Select over their `q2_pattern_coverage` output; the object path is
-not visible in these captures):
+Schemes found by the 1-day and 7-day runs, checked in the console with S3 Select over their `q2_pattern_coverage`
+output (the same files are saved in `s3/experiments/w1/` and `w7/`):
 
 ![142 of 370](learner-lab_465553375598/screenshots/s3select_pattern_coverage_142_of_370.jpg)
 ![157 of 370](learner-lab_465553375598/screenshots/s3select_pattern_coverage_157_of_370.jpg)
