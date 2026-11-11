@@ -107,7 +107,8 @@ Historical replay, superseded by the 8 Nov ordering fix (HI-Small from 8 Sep 00:
 rows more than an hour ahead of the stream's clock — 1,001 out-of-order rows, mostly laundering, that would otherwise
 inflate the alert precision on the Live monitor tab): 875 alerts (0.9 % of transfers), 5 truly laundering (0.57 %, about 10x
 the 0.058 % base rate of that 4.5-hour window), median 0.16 s from transfer to alert. (The 875 and 5 are in the alerts
-saved from S3, `raw_aws_output/team_050752609589/s3/streaming_alerts/`; the run's timing log was not kept.) The whole-day figure above
+saved from S3, `raw_aws_output/team_050752609589/s3/streaming_alerts/`. The 36 s, the 1,001 skipped rows and the
+0.16 s are from the run's console output at the time, which was not kept.) The whole-day figure above
 (2.26 %, 20x) is the one to quote; the replay window only holds 54 laundering transfers.
 
 ## 2026-11-04 · Speed layer works; the velocity rule is too noisy (fixed above)
@@ -142,13 +143,16 @@ learning day (7 Sep), then measure once on 8 Sep.
 
 ## 2026-11-04 · HI-Large is run in full (the pitch's 180 million transfers)
 
-The team account has no USD 50 cap and allows 256 vCPUs, so HI-Large was run instead of HI-Medium. It has the
+The team account has no USD 50 cap and more than Learner Lab's 32 vCPUs (HI-Large ran on 9 × m5.2xlarge = 72
+vCPUs, `raw_aws_output/team_050752609589/cluster_j-0643721XTYCK3JC3WMQ.json`; its quota was 256 vCPUs at the time,
+not captured), so HI-Large was run instead of HI-Medium. It has the
 same shape as HI-Small: 97 normal days (1 Aug - 5 Nov 2022), then a tail (6 Nov - 12 Jan) of 2 to 2,192
 transfers a day, about 60 % laundering. Same rule as HI-Small: learn on the first 70 % of normal days
 (1 Aug - 7 Oct), official grading on the rest (8 Oct - 5 Nov), tail reported separately.
 Resources: Glue with 10 G.1X workers (7 min 45 s), EMR 9 x m5.2xlarge (BQ2 compute 159 s; the 7 Nov re-run, same parameters and results, 178 s). Before the run the
-watchlist-edges step was rewritten from an OR join (a nested loop: about 30 billion comparisons at this size) to two
-equi-joins, with identical output. Official top-1,000 precision 18.8 % against 4.7 % at random.
+watchlist-edges step was rewritten from an OR join (a nested loop: an estimated 30 billion comparisons at this size) to two
+equi-joins, with identical output (verified locally before the run: 6,177 edges, no difference; commit 57353cc).
+Official top-1,000 precision 18.8 % against 4.7 % at random.
 
 ## 2026-11-04 · The pipeline runs in the team AWS account, not Learner Lab
 
@@ -184,7 +188,8 @@ harder than spotting schemes already under way — reported honestly as the offi
 
 **Finding.** The scorecard learns on "calibration" accounts and is graded on "holdout" accounts, split by
 the last hex character of the account id. On HI-Small, 483,675 account ids end in `0` and 13,317 in `1`,
-so the holdout "half" was only 11,649 accounts (3 %) — a small and unusual group. The 2nd-to-last
+so the holdout "half" was only 11,649 accounts (3 %) — a small and unusual group. (Counts from the 4 Nov run
+before this fix; that split's output was overwritten by the corrected runs.) The 2nd-to-last
 character is evenly spread (≈31,000 accounts per hex digit), so the split now uses it.
 
 **Effect.** All BQ2 accuracy figures from before this change are discarded.
@@ -194,7 +199,8 @@ character is evenly spread (≈31,000 accounts per hex digit), so the split now 
 **Observe.** First HI-Small run on EMR (3 × m5.xlarge, Learner Lab account): the BQ2 step took 40 min 10 s
 (EMR step time); the ranking step alone took 670 s of 932 s of timed step time while doing little real work.
 **Hypothesise.** Each step's query plan carries every earlier step, so Spark spends its time re-planning
-and matching cached plans rather than computing. (Adding *more* caching made it slower, which supports this.)
+and matching cached plans rather than computing. (An earlier attempt that added *more* caching made it slower, which supports this; that attempt's timings
+were not recorded.)
 **Change one thing.** `--lineage checkpoint`: heavy steps are checkpointed to the cluster's HDFS, which
 saves the result and cuts the plan back to "read this saved table".
 **Measure.** Local SYN-Small, same code, only the switch changed: 593.5 s → 40.0 s, identical watchlist.
