@@ -109,6 +109,6 @@ The consumer reports alert rate, alert precision (from labels, for the demo only
 The Kafka producer sorts the selected interval by event timestamp using temporary SQLite storage before sending.
 Equal-time events retain file order, the event limit applies after sorting, and no far-ahead rows are dropped.
 Preparation reads the entire source and needs temporary disk space. Latency is measured from publication,
-excluding preparation and replay pacing. The ordering fix is tested locally; deployment and a fresh Kafka replay
-are required before reporting updated live measurements. BQ1's budget selector is a Wilson-ranked prefix with
+excluding preparation and replay pacing. The ordering fix is tested locally and verified on EC2 (8 Nov 21:03
+replay, `raw_aws_output/team_050752609589/ec2_streaming/`); the live measurements in `docs/decisions.md` come from that replay. BQ1's budget selector is a Wilson-ranked prefix with
 historical capture, rather than a guaranteed optimal allocation.

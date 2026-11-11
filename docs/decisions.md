@@ -3,7 +3,7 @@
 Decisions made while running the pipeline on AWS, with the evidence behind each. Newest first.
 BQ1 / BQ2 are the two business questions (channels / networks), named as on the dashboard.
 
-## 2026-11-08 · Kafka replay sorted by event time (local fix; EC2 verification pending)
+## 2026-11-08 · Kafka replay sorted by event time (local fix, verified on EC2 the same evening)
 
 The raw CSV is not strictly chronological. Kafka preserves publication order within a partition, but cannot
 sort event timestamps; the velocity rule's deque requires chronological events per sender. The producer now
@@ -19,6 +19,10 @@ events. This is not an EC2/Kafka validation. Member 6 (Video B / Kafka demo) mus
 and rerun `run_live_demo.sh`, which resets the topic and starts a fresh consumer. No batch rerun is needed.
 Re-measure live alert counts and latency before quoting them for this version; earlier Kafka figures below
 describe the old replay. Consumer latency starts at `produced_at`, excluding replay preparation and pacing.
+
+**EC2 verification (8 Nov 21:03).** The updated producer was deployed to the serving EC2 and `run_live_demo.sh`
+was rerun: "Preparing timestamp-ordered replay", then 300,000 events in 96 s, timestamp ordered, no out-of-order
+rows dropped; median delay 64 ms, p95 151 ms; 3,071 alerts. Logs: `raw_aws_output/team_050752609589/ec2_streaming/`.
 
 Proposal review also identified outstanding qualifications, not implemented fixes: BQ1 selects a prefix of
 Wilson-ranked segments rather than solving a maximum-capture optimisation; its curve is historical capture.

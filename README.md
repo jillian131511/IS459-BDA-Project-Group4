@@ -80,7 +80,8 @@ The replay starts at the first official grading day, so the stream only contains
 The producer reads the source and sorts the selected interval on temporary disk before sending; allow time and
 disk space for preparation. The event limit applies after sorting, and no out-of-order events are dropped.
 After updating an existing server's `/opt/aml/streaming/producer.py`, rerun `run_live_demo.sh` for a fresh topic
-and consumer state; no batch rerun is needed. The ordering fix is locally tested; EC2 verification is pending.
+and consumer state; no batch rerun is needed. The ordering fix is deployed and verified on EC2 (8 Nov 21:03 replay: 300,000 events in 96 s, timestamp ordered;
+logs in `raw_aws_output/team_050752609589/ec2_streaming/`).
 
 ### 5  After Week 13
 ```bash
@@ -95,7 +96,7 @@ Delete any IAM access keys made for the project by hand. The account-wide EMR de
 Learn on the first 70 % of the normal days, grade on the remaining 30 %; the tail days (almost all laundering)
 are reported separately (`docs/decisions.md`).
 
-| What | HI-Large (179.7M rows, 97 days) | HI-Small (5.1M rows, 10 days) |
+| What | HI-Large (179.7M rows; 97 normal days + 68-day tail) | HI-Small (5.1M rows; 10 normal days + 8-day tail) |
 |---|---|---|
 | Learn / grade | 1 Aug - 7 Oct / 8 Oct - 5 Nov 2022 | 1 - 7 Sep / 8 - 10 Sep 2022 |
 | Data quality | 0 malformed, 150 duplicates, 0 rows without an FX rate | 0 malformed, 9 duplicates, 0 without FX |

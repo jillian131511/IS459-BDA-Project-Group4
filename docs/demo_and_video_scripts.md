@@ -78,9 +78,9 @@ The resources already exist, so every command below **updates** them (all script
 
 ## 3 · Video B: "Run the pipeline end-to-end" (6-8 min, narrated) — Member 6 records an HI-Large run
 
-**Before the Kafka recording:** deploy the updated `streaming/producer.py` to
-`/opt/aml/streaming/producer.py` on the existing serving EC2. The 8 Nov ordering fix is locally tested, not yet
-verified on EC2. Step 4 below resets the topic and starts a fresh consumer; this producer-only update does not
+**Before the Kafka recording (done 8 Nov):** the updated `streaming/producer.py` was deployed to
+`/opt/aml/streaming/producer.py` on the serving EC2 and verified by a replay at 21:03 (300,000 events in 96 s,
+timestamp ordered; `raw_aws_output/team_050752609589/ec2_streaming/`). To redeploy after a later change, follow the same steps. Step 4 below resets the topic and starts a fresh consumer; this producer-only update does not
 require step 1 or a batch rerun. Record a new live clip and fresh alert/latency measurements. The producer first
 reads the entire source and sorts the selected interval on temporary disk, so allow preparation time and disk
 space before alerts begin. It keeps all selected events and applies the event limit after chronological sorting.
