@@ -24,7 +24,11 @@ Inside each account folder, files keep the names AWS gives them:
 | `steps_j-066507029D365FFVM9BN.json`, `run_info/analytics/HI-Small.json` | After tuning: BQ2 step 2 min 56 s; ranking step 15.9 s |
 | `steps_j-01028977DXQQ53H5QK5.json`, `run_info/experiments/w1, w3, w7.json` | Window experiment: `--window-days 1 / 3 / 7`, path-join 9.5 / 11.3 / 15.7 s, job totals 120.7 / 124.1 / 129.7 s |
 
-Not collected from this account: the window experiment's precision and schemes-found for 1 and 7 days.
+| `screenshots/emr_steps_experiments_HI-Small_2026-11-04.jpg` | Experiment cluster `aml-q2-experiments-HI-Small`: steps q2-w1 (3 min 40 s), q2-w7 (2 min 42 s), q2-w3 (2 min 34 s), plus one cancelled q2-w3 |
+| `screenshots/emr_step_w1_arguments.jpg`, `emr_step_w7_arguments.jpg` | Full arguments: identical except `--window-days 1 / 7`, `--out-prefix experiments/w1 / w7`, `--tag`; both `--lineage checkpoint` |
+| `screenshots/s3select_pattern_coverage_142_of_370.jpg`, `…157_of_370.jpg` | S3 Select `SUM(n_detected), SUM(n_attempts)` over the experiments' `q2_pattern_coverage` output: 142 of 370 and 157 of 370 (the 1-day and 7-day runs; the object path is not visible in the screenshots) |
+
+Not yet backed from this account: the window experiment's precision for 1 and 7 days (8.7 % / 14.1 % same days, top 1,000).
 
 ## Team account (`team_050752609589/`)
 
